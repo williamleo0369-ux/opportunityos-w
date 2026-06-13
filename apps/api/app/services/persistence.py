@@ -21,7 +21,15 @@ from app.schemas import (
 from app.services.database_store import database_is_empty, database_status, load_payload, save_payload
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+def _find_project_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "apps" / "api").exists() or (parent / "package.json").exists():
+            return parent
+    return current.parents[2]
+
+
+PROJECT_ROOT = _find_project_root()
 LEGACY_STORE_PATH = PROJECT_ROOT / ".opportunity-os-data" / "store.json"
 STORE_PATH = Path(os.environ.get("OPPORTUNITY_OS_STORE_PATH", Path.home() / ".opportunity-os" / "store.json")).expanduser()
 

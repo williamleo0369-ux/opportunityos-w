@@ -270,15 +270,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </label>
               ) : null}
               <label className="block">
-                <span className="text-sm font-semibold text-ink">邮箱</span>
+                <span className="text-sm font-semibold text-ink">{authMode === "login" ? "邮箱或账号" : "邮箱"}</span>
                 <span className="relative mt-2 block">
                   <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={17} />
                   <input
-                    type="email"
+                    type={authMode === "login" ? "text" : "email"}
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     className="focus-ring w-full rounded-xl border border-line bg-white py-3.5 pl-11 pr-4 text-ink transition hover:border-indigo/30"
-                    autoComplete="email"
+                    autoComplete={authMode === "login" ? "username" : "email"}
                     required
                   />
                 </span>

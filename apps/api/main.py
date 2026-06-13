@@ -140,6 +140,12 @@ active_search_tasks: dict[str, dict[str, str]] = {}
 SESSION_COOKIE = "opportunity_os_session"
 DEFAULT_SEARCH_QUOTA = int(os.getenv("OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY", "20"))
 DEFAULT_REPORT_QUOTA = int(os.getenv("OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY", "100"))
+BOOTSTRAP_ADMIN_USERNAME = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_USERNAME", "admin").strip() or "admin"
+BOOTSTRAP_ADMIN_PASSWORD = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_PASSWORD", "admin1212").strip() or "admin1212"
+BOOTSTRAP_ADMIN_EMAIL = (
+    os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_EMAIL", "admin@opportunityos.local").strip().lower()
+    or "admin@opportunityos.local"
+)
 
 
 class SearchTaskCancelled(Exception):
@@ -243,6 +249,46 @@ def utc_now() -> datetime:
 
 def public_user(payload: dict[str, object]) -> User:
     return User.model_validate(payload)
+
+
+def load_user_payload_by_login(identifier: str) -> dict[str, object] | None:
+    normalized = identifier.strip().lower()
+    if not normalized:
+        return None
+    payload = load_user_payload_by_email(normalized)
+    if payload:
+        return payload
+    for account in load_user_payloads():
+        if str(account.get("username", "")).strip().lower() == normalized:
+            return account
+    return None
+
+
+def ensure_bootstrap_admin() -> None:
+    now = utc_now().isoformat()
+    payload = load_user_payload_by_login(BOOTSTRAP_ADMIN_USERNAME)
+    if payload is None:
+        payload = load_user_payload_by_email(BOOTSTRAP_ADMIN_EMAIL)
+    if payload is None:
+        payload = {
+            "id": str(uuid4()),
+            "created_at": now,
+        }
+    payload.update(
+        {
+            "email": BOOTSTRAP_ADMIN_EMAIL,
+            "password_hash": hash_password(BOOTSTRAP_ADMIN_PASSWORD),
+            "username": BOOTSTRAP_ADMIN_USERNAME,
+            "avatar_url": payload.get("avatar_url"),
+            "plan": "pro",
+            "role": "admin",
+            "is_active": True,
+            "search_quota_daily": DEFAULT_SEARCH_QUOTA,
+            "report_quota_monthly": DEFAULT_REPORT_QUOTA,
+            "updated_at": now,
+        }
+    )
+    upsert_user_payload(payload)
 
 
 def usage_for_user(user: User) -> UserUsage:
@@ -713,6 +759,7 @@ source_health_scheduler.configure(lambda: run_source_health_check("scheduler"))
 
 @app.on_event("startup")
 def maybe_start_source_health_scheduler() -> None:
+    ensure_bootstrap_admin()
     if TASK_QUEUE_MODE == "local":
         recover_interrupted_search_tasks()
     raw_interval = os.getenv("OPPORTUNITY_OS_SOURCE_HEALTH_INTERVAL_SECONDS", "").strip()
@@ -778,11 +825,11 @@ def register(request: RegisterRequest, response: Response) -> AuthResponse:
 
 @app.post("/api/auth/login", response_model=AuthResponse)
 def login(request: LoginRequest, response: Response) -> AuthResponse:
-    payload = load_user_payload_by_email(request.email)
+    payload = load_user_payload_by_login(request.email)
     password_hash = str(payload.get("password_hash", "")) if payload else DUMMY_PASSWORD_HASH
     password_valid = verify_password(request.password, password_hash)
     if payload is None or not password_valid:
-        raise HTTPException(status_code=401, detail="邮箱或密码不正确")
+        raise HTTPException(status_code=401, detail="账号或密码不正确")
     user = public_user(payload)
     if not user.is_active:
         raise HTTPException(status_code=403, detail="账户已停用，请联系管理员")

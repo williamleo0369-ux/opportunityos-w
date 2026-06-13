@@ -1,0 +1,21 @@
+{
+  "name": "opportunity-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI product opportunity discovery MVP with Next.js and FastAPI.",
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "dev:api": "cd apps/api && python3 -m uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:worker": "cd apps/api && celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=${OPPORTUNITY_OS_SEARCH_WORKERS:-2}",
+    "install:api": "python3 -m pip install -r apps/api/requirements.txt"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20",
+    "python": ">=3.11"
+  }
+}

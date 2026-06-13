@@ -1,0 +1,16 @@
+node_modules
+apps/web/.next
+apps/web/tsconfig.tsbuildinfo
+apps/api/__pycache__
+apps/api/app/__pycache__
+**/__pycache__
+.opportunity-os-data
+.env
+.env*
+!.env.example
+.git
+.DS_Store
+*.log
+*.db
+*.sqlite
+*.sqlite3

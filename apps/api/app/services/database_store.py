@@ -12,7 +12,32 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 DEFAULT_DATABASE_PATH = Path.home() / ".opportunity-os" / "opportunity-os.db"
-DATABASE_URL = os.getenv("OPPORTUNITY_OS_DATABASE_URL", f"sqlite:///{DEFAULT_DATABASE_PATH}").strip()
+DATABASE_ENV_KEYS = ("OPPORTUNITY_OS_DATABASE_URL", "DATABASE_URL")
+
+
+def _normalize_database_url(value: str) -> str:
+    if value.startswith("postgres://"):
+        return f"postgresql://{value.removeprefix('postgres://')}"
+    return value
+
+
+def _is_supported_database_url(value: str) -> bool:
+    return value.startswith(("sqlite:///", "postgresql://", "postgres://"))
+
+
+def _resolve_database_url() -> str:
+    for key in DATABASE_ENV_KEYS:
+        value = os.getenv(key, "").strip()
+        if _is_supported_database_url(value):
+            return _normalize_database_url(value)
+
+    configured_values = [os.getenv(key, "").strip() for key in DATABASE_ENV_KEYS if os.getenv(key, "").strip()]
+    if configured_values:
+        return configured_values[0]
+    return f"sqlite:///{DEFAULT_DATABASE_PATH}"
+
+
+DATABASE_URL = _resolve_database_url()
 _INITIALIZE_LOCK = threading.RLock()
 _DATABASE_INITIALIZED = False
 

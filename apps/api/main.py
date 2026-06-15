@@ -5,7 +5,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from time import perf_counter
-from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response
@@ -82,6 +81,7 @@ from app.services.data_quality import build_data_quality
 from app.services.health_scheduler import SourceHealthScheduler
 from app.services.pipeline import build_report, run_pipeline
 from app.services.real_sources import probe_1688_supply_status
+from app.services.redis_url import resolve_redis_url, safe_redis_url
 from app.services.source_credentials import (
     CredentialDecryptionError,
     clear_1688_cookie,
@@ -121,7 +121,7 @@ SEARCH_WORKER_COUNT = int(os.getenv("OPPORTUNITY_OS_SEARCH_WORKERS", "2"))
 TASK_QUEUE_MODE = os.getenv("OPPORTUNITY_OS_TASK_QUEUE", "local").strip().lower()
 if TASK_QUEUE_MODE not in {"local", "celery"}:
     TASK_QUEUE_MODE = "local"
-REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0").strip()
+REDIS_URL = resolve_redis_url()
 search_executor = ThreadPoolExecutor(max_workers=SEARCH_WORKER_COUNT) if TASK_QUEUE_MODE == "local" else None
 tasks: dict[str, SearchTask] = state["tasks"]
 opportunities: dict[str, Opportunity] = state["opportunities"]
@@ -190,11 +190,7 @@ def sync_state_from_database() -> None:
 
 
 def safe_broker_url() -> str:
-    parts = urlsplit(REDIS_URL)
-    hostname = parts.hostname or ""
-    port = f":{parts.port}" if parts.port else ""
-    username = f"{parts.username}@" if parts.username else ""
-    return urlunsplit((parts.scheme, f"{username}{hostname}{port}", parts.path, parts.query, parts.fragment))
+    return safe_redis_url(REDIS_URL)
 
 
 def celery_worker_count() -> int:

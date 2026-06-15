@@ -112,7 +112,7 @@ Optional real-source credentials:
 - `OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION` / `OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION`: optional model rates used to estimate Agent Run cost. Without them, token usage is recorded but dollar cost remains unset.
 - `OPPORTUNITY_OS_SOURCE_HEALTH_INTERVAL_SECONDS`: optional interval, minimum 60 seconds. When set, the API process starts scheduled source-health checks on boot and persists snapshots to the local store.
 - `OPPORTUNITY_OS_TASK_QUEUE`: `local` by default, or `celery` for the Redis-backed distributed queue.
-- `REDIS_URL`: Celery broker and result-backend URL; defaults to `redis://127.0.0.1:6379/0`.
+- `REDIS_URL`: Celery broker and result-backend URL; defaults to `redis://127.0.0.1:6379/0`. Railway-style `REDIS_PRIVATE_URL`, `REDIS_PUBLIC_URL`, and `RAILWAY_REDIS_URL` are also recognized.
 - `OPPORTUNITY_OS_SEARCH_WORKERS`: local worker count and recommended Celery concurrency; defaults to `2`.
 - `OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY`: search allowance assigned to new accounts; defaults to `20`.
 - `OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY`: report allowance assigned to new accounts; defaults to `100`.

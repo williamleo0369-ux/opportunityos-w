@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
-
 from celery import Celery
 
+from app.services.redis_url import resolve_redis_url
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0").strip()
+
+REDIS_URL = resolve_redis_url()
 
 celery_app = Celery(
     "opportunity_os",

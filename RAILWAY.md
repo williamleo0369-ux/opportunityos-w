@@ -17,7 +17,7 @@ Create these services from the same GitHub repository:
    - Public domain: enabled
    - Environment:
      - `OPPORTUNITY_OS_DATABASE_URL=${{Postgres.DATABASE_URL}}`
-     - `REDIS_URL=${{Redis.REDIS_URL}}`
+     - `REDIS_URL=${{Redis.REDIS_URL}}` (or the Redis plugin's `REDIS_PRIVATE_URL`; the API recognizes both)
      - `OPPORTUNITY_OS_TASK_QUEUE=celery`
      - `OPPORTUNITY_OS_AUTH_SECRET=<generate-a-long-random-secret>`
      - `OPPORTUNITY_OS_SECURE_COOKIES=true`
@@ -35,7 +35,7 @@ Create these services from the same GitHub repository:
      ```
    - Environment:
      - `OPPORTUNITY_OS_DATABASE_URL=${{Postgres.DATABASE_URL}}`
-     - `REDIS_URL=${{Redis.REDIS_URL}}`
+     - `REDIS_URL=${{Redis.REDIS_URL}}` (or the Redis plugin's `REDIS_PRIVATE_URL`; the worker recognizes both)
      - `OPPORTUNITY_OS_TASK_QUEUE=celery`
      - `OPPORTUNITY_OS_AUTH_SECRET=<same-secret-as-api>`
      - Same optional AI/source keys as the API service

@@ -145,6 +145,8 @@ export default function OpportunityDetailPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedValidation, setExpandedValidation] = useState("需求验证");
+  const [expandedExperiment, setExpandedExperiment] = useState("WEEK 01");
+  const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -513,21 +515,56 @@ export default function OpportunityDetailPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {detail.data_quality.sources.map((source) => (
-                <div key={source.key} className="rounded-xl border border-line bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-ink">{source.label}</p>
-                      <p className="mt-1 text-xs text-muted">{source.category}</p>
+              {detail.data_quality.sources.map((source) => {
+                const expanded = Boolean(expandedSources[source.key]);
+                return (
+                  <button
+                    key={source.key}
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setExpandedSources((current) => ({
+                        ...current,
+                        [source.key]: !current[source.key],
+                      }))
+                    }
+                    className={`focus-ring group rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo/30 hover:shadow-panel ${
+                      expanded ? "border-indigo/30 shadow-panel" : "border-line"
+                    }`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-ink">{source.label}</p>
+                        <p className="mt-1 text-xs text-muted">{source.category}</p>
+                      </div>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${sourceStatusClass(source.status)}`}>
+                          {sourceStatusLabel(source.status)}
+                        </span>
+                        <ChevronDown
+                          size={15}
+                          className={`text-indigo transition-transform ${expanded ? "rotate-180" : ""}`}
+                        />
+                      </span>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${sourceStatusClass(source.status)}`}>
-                      {sourceStatusLabel(source.status)}
+                    <p className="text-sm font-semibold text-indigo">{source.count} signals</p>
+                    <p className={`mt-2 text-xs leading-5 text-muted ${expanded ? "" : "line-clamp-2"}`}>
+                      {source.note}
+                    </p>
+                    <span className="mt-3 inline-flex text-xs font-semibold text-indigo opacity-80 transition group-hover:opacity-100">
+                      {expanded ? "收起来源说明" : "展开来源说明"}
                     </span>
-                  </div>
-                  <p className="text-sm font-semibold text-indigo">{source.count} signals</p>
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{source.note}</p>
-                </div>
-              ))}
+                    {expanded ? (
+                      <div className="mt-3 rounded-lg bg-field px-3 py-2 text-xs leading-5 text-muted">
+                        <p>
+                          决策使用：{source.count > 0 ? "可纳入当前评分与验证计划。" : "当前只作为缺口提示，不直接增强评分。"}
+                        </p>
+                        <p className="mt-1">状态码：{source.status}</p>
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           </div>
           {detail.data_quality.gaps.length ? (
@@ -570,20 +607,54 @@ export default function OpportunityDetailPage() {
 
         <Section title="30 天验证实验">
           <div className="grid gap-3 md:grid-cols-2">
-            {experimentPlan.map((step) => (
-              <div key={step.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="rounded-full bg-indigo/10 px-2.5 py-1 text-xs font-bold text-indigo">{step.label}</span>
-                  <FlaskConical size={17} className="text-indigo" />
-                </div>
-                <p className="font-semibold text-ink">{step.title}</p>
-                <p className="mt-2 text-sm leading-6 text-muted">{step.detail}</p>
-                <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-field px-2.5 py-1 text-xs font-semibold text-muted">
-                  <TimerReset size={13} />
-                  {step.metric}
-                </p>
-              </div>
-            ))}
+            {experimentPlan.map((step) => {
+              const expanded = expandedExperiment === step.label;
+              return (
+                <button
+                  key={step.label}
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setExpandedExperiment((current) =>
+                      current === step.label ? "" : step.label,
+                    )
+                  }
+                  className={`focus-ring group rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo/30 hover:shadow-panel ${
+                    expanded ? "border-indigo/30 shadow-panel" : "border-line"
+                  }`}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="rounded-full bg-indigo/10 px-2.5 py-1 text-xs font-bold text-indigo">{step.label}</span>
+                    <span className="flex items-center gap-2 text-indigo">
+                      <FlaskConical size={17} />
+                      <ChevronDown
+                        size={15}
+                        className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+                      />
+                    </span>
+                  </div>
+                  <p className="font-semibold text-ink">{step.title}</p>
+                  <p className={`mt-2 text-sm leading-6 text-muted ${expanded ? "" : "line-clamp-2"}`}>
+                    {step.detail}
+                  </p>
+                  <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-field px-2.5 py-1 text-xs font-semibold text-muted">
+                    <TimerReset size={13} />
+                    {step.metric}
+                  </p>
+                  {expanded ? (
+                    <div className="mt-3 rounded-lg bg-indigo/5 px-3 py-2 text-xs leading-5 text-muted">
+                      <p className="font-semibold text-ink">交付物</p>
+                      <p className="mt-1">
+                        输出一页验证记录：证据截图、判断标准、通过/不通过结论，以及下一周是否继续投入。
+                      </p>
+                    </div>
+                  ) : null}
+                  <span className="mt-3 inline-flex text-xs font-semibold text-indigo opacity-80 transition group-hover:opacity-100">
+                    {expanded ? "收起实验细节" : "展开实验细节"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Section>
 

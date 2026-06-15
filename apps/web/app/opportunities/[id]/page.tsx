@@ -147,6 +147,10 @@ export default function OpportunityDetailPage() {
   const [expandedValidation, setExpandedValidation] = useState("需求验证");
   const [expandedExperiment, setExpandedExperiment] = useState("WEEK 01");
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
+  const [expandedPatentId, setExpandedPatentId] = useState<string | null>(null);
+  const [expandedCompetitorId, setExpandedCompetitorId] = useState<string | null>(null);
+  const [expandedPainId, setExpandedPainId] = useState<string | null>(null);
+  const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -220,6 +224,10 @@ export default function OpportunityDetailPage() {
 
   const opportunity = detail.opportunity;
   const trend = detail.trend_data[0];
+  const selectedPatentId = expandedPatentId ?? detail.patents[0]?.id ?? null;
+  const selectedCompetitorId = expandedCompetitorId ?? detail.competitors[0]?.id ?? null;
+  const selectedPainId = expandedPainId ?? detail.pain_points[0]?.id ?? null;
+  const selectedIdeaId = expandedIdeaId ?? detail.innovation_ideas[0]?.id ?? null;
   const recommendation = recommendationLabels[opportunity.recommendation_level];
   const recommendationClass = recommendationTone[opportunity.recommendation_level];
   const decision = decisionCopy(opportunity.opportunity_score, opportunity.recommendation_level);
@@ -738,13 +746,17 @@ export default function OpportunityDetailPage() {
               </p>
             ) : null}
             <div className="max-h-[360px] space-y-2 overflow-auto pr-2">
-              {detail.patents.slice(0, 5).map((patent) => (
-                <a
+              {detail.patents.slice(0, 5).map((patent) => {
+                const expanded = selectedPatentId === patent.id;
+                return (
+                <button
                   key={patent.id}
-                  href={patent.original_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-xl border border-line bg-white p-4 shadow-sm transition hover:border-indigo/30"
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedPatentId((current) => (current === patent.id ? "" : patent.id))}
+                  className={`focus-ring block w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-indigo/30 hover:shadow-panel ${
+                    expanded ? "border-indigo/30 shadow-panel" : "border-line"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -753,11 +765,31 @@ export default function OpportunityDetailPage() {
                         {patent.patent_number} · {patent.applicant}
                       </p>
                     </div>
-                    <span className="rounded-lg bg-indigo/10 px-2 py-1 text-xs font-semibold text-indigo">{patentStatusLabel(patent.legal_status)}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="rounded-lg bg-indigo/10 px-2 py-1 text-xs font-semibold text-indigo">{patentStatusLabel(patent.legal_status)}</span>
+                      <ChevronDown size={15} className={`text-indigo transition-transform ${expanded ? "rotate-180" : ""}`} />
+                    </span>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">{patent.abstract}</p>
-                </a>
-              ))}
+                  <p className={`mt-2 text-sm leading-6 text-muted ${expanded ? "" : "line-clamp-2"}`}>{patent.abstract}</p>
+                  {expanded ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-field px-3 py-2 text-xs text-muted">
+                      <span>申请日 {patent.filing_date || "待确认"}</span>
+                      <span>到期 {patent.estimated_expiry_date || "待确认"}</span>
+                      <a
+                        href={patent.original_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="focus-ring inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 font-semibold text-indigo"
+                      >
+                        <ExternalLink size={13} />
+                        打开专利来源
+                      </a>
+                    </div>
+                  ) : null}
+                </button>
+                );
+              })}
               {detail.patent_summary.total ? null : <EmptyState title="暂无专利数据" description="后端尚未返回专利引用。" />}
               {detail.report_id ? null : <p className="text-sm text-clay">报告仍在生成中。</p>}
             </div>
@@ -774,24 +806,60 @@ export default function OpportunityDetailPage() {
             ) : (
               <EmptyState title="暂无结构化竞品" description="Amazon 搜索未返回可解析 listing；请稍后重试或接入备用竞品源。" />
             )}
-            {detail.competitors.slice(0, 5).map((item) => (
-              <a key={item.id} href={item.product_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-line bg-white p-4 shadow-sm transition hover:border-indigo/30">
+            {detail.competitors.slice(0, 5).map((item) => {
+              const expanded = selectedCompetitorId === item.id;
+              return (
+              <button
+                key={item.id}
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpandedCompetitorId((current) => (current === item.id ? "" : item.id))}
+                className={`focus-ring block w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-indigo/30 hover:shadow-panel ${
+                  expanded ? "border-indigo/30 shadow-panel" : "border-line"
+                }`}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium text-ink">{item.product_title}</p>
-                  <span className="text-sm text-muted">{platformLabel(item.platform)}</span>
+                  <span className="flex shrink-0 items-center gap-2 text-sm text-muted">
+                    {platformLabel(item.platform)}
+                    <ChevronDown size={15} className={`text-indigo transition-transform ${expanded ? "rotate-180" : ""}`} />
+                  </span>
                 </div>
                 <p className="mt-2 text-sm text-muted">
                   {item.brand} · ${item.price.toFixed(2)} · {item.rating}/5 · {item.review_count.toLocaleString()} reviews
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {item.weaknesses.slice(0, 2).map((weakness) => (
+                  {(expanded ? item.weaknesses : item.weaknesses.slice(0, 2)).map((weakness) => (
                     <span key={weakness} className="rounded-lg bg-field px-2.5 py-1 text-xs font-semibold text-muted">
                       {weakness}
                     </span>
                   ))}
                 </div>
-              </a>
-            ))}
+                {expanded ? (
+                  <div className="mt-3 rounded-lg bg-field px-3 py-2 text-xs leading-5 text-muted">
+                    <p>估算销量：{item.estimated_sales.toLocaleString()} · 货币：{item.currency}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.main_features.map((feature) => (
+                        <span key={feature} className="rounded-md bg-white px-2 py-1 font-semibold text-muted">
+                          {feature}
+                        </span>
+                      ))}
+                      <a
+                        href={item.product_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="focus-ring inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 font-semibold text-indigo"
+                      >
+                        <ExternalLink size={13} />
+                        打开竞品来源
+                      </a>
+                    </div>
+                  </div>
+                ) : null}
+              </button>
+              );
+            })}
           </div>
         </Section>
       </div>
@@ -825,19 +893,32 @@ export default function OpportunityDetailPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Section title="用户痛点">
           <div className="space-y-3">
-            {detail.pain_points.map((point) => (
-              <div key={point.id} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+            {detail.pain_points.map((point) => {
+              const expanded = selectedPainId === point.id;
+              return (
+              <div key={point.id} className={`rounded-xl border bg-white p-4 shadow-sm transition ${expanded ? "border-indigo/30 shadow-panel" : "border-line"}`}>
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedPainId((current) => (current === point.id ? "" : point.id))}
+                  className="focus-ring w-full rounded-lg text-left"
+                >
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium text-ink">{point.pain_point}</p>
                   <div className="flex items-center gap-2">
                     <span className="rounded-lg bg-field px-2 py-1 text-xs font-semibold text-muted">{sourceLabel(point.source)}</span>
                     <span className="rounded-lg bg-indigo/10 px-2 py-1 text-sm font-semibold text-indigo">{point.frequency}</span>
+                    <ChevronDown size={15} className={`text-indigo transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </div>
                 </div>
-                <p className="mt-2 text-sm text-muted">{point.ai_summary}</p>
+                <p className={`mt-2 text-sm leading-6 text-muted ${expanded ? "" : "line-clamp-2"}`}>{point.ai_summary}</p>
+                <span className="mt-2 inline-flex text-xs font-semibold text-indigo">
+                  {expanded ? "收起痛点证据" : "展开痛点证据"}
+                </span>
+                </button>
                 {point.example_reviews.length ? (
-                  <div className="mt-3 space-y-2">
-                    {point.example_reviews.slice(0, 2).map((review, index) => (
+                  <div className={`mt-3 space-y-2 ${expanded ? "" : "hidden"}`}>
+                    {point.example_reviews.map((review, index) => (
                       <blockquote key={`${point.id}-${index}`} className="rounded-lg border-l-2 border-indigo/40 bg-field px-3 py-2 text-xs leading-5 text-muted">
                         “{review}”
                       </blockquote>
@@ -845,8 +926,8 @@ export default function OpportunityDetailPage() {
                   </div>
                 ) : null}
                 {point.evidence_urls.length ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {point.evidence_urls.slice(0, 3).map((url, index) => (
+                  <div className={`mt-3 flex flex-wrap gap-2 ${expanded ? "" : "hidden"}`}>
+                    {point.evidence_urls.map((url, index) => (
                       <a
                         key={url}
                         href={url}
@@ -860,26 +941,66 @@ export default function OpportunityDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-xs text-muted/75">当前为跨来源推导信号，暂无直接评论链接。</p>
+                  expanded ? <p className="mt-3 text-xs text-muted/75">当前为跨来源推导信号，暂无直接评论链接。</p> : null
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </Section>
 
         <Section title="创新方向">
           <div className="space-y-3">
-            {detail.innovation_ideas.slice(0, 6).map((idea) => (
-              <div key={idea.id} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+            {detail.innovation_ideas.slice(0, 6).map((idea) => {
+              const expanded = selectedIdeaId === idea.id;
+              return (
+              <button
+                key={idea.id}
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpandedIdeaId((current) => (current === idea.id ? "" : idea.id))}
+                className={`focus-ring w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-indigo/30 hover:shadow-panel ${
+                  expanded ? "border-indigo/30 shadow-panel" : "border-line"
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-ink">{idea.idea_title}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted">{idea.idea_description}</p>
+                    <p className={`mt-2 text-sm leading-6 text-muted ${expanded ? "" : "line-clamp-3"}`}>{idea.idea_description}</p>
                   </div>
-                  <span className="electric-text text-lg font-semibold">{idea.differentiation_score}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="electric-text text-lg font-semibold">{idea.differentiation_score}</span>
+                    <ChevronDown size={15} className={`text-indigo transition-transform ${expanded ? "rotate-180" : ""}`} />
+                  </span>
                 </div>
-              </div>
-            ))}
+                {expanded ? (
+                  <div className="mt-3 grid gap-3 rounded-lg bg-field px-3 py-3 text-xs leading-5 text-muted md:grid-cols-2">
+                    <div>
+                      <p className="font-semibold text-ink">目标用户</p>
+                      <p className="mt-1">{idea.target_user}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-ink">实施影响</p>
+                      <p className="mt-1">市场 {idea.market_value_score} · 难度 {idea.difficulty_score} · 成本 {idea.cost_impact}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-ink">建议功能</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {idea.suggested_features.map((feature) => (
+                          <span key={feature} className="rounded-md bg-white px-2 py-1 font-semibold text-muted">
+                            {feature}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                <span className="mt-3 inline-flex text-xs font-semibold text-indigo">
+                  {expanded ? "收起创新细节" : "展开创新细节"}
+                </span>
+              </button>
+              );
+            })}
           </div>
         </Section>
       </div>

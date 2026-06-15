@@ -133,7 +133,7 @@ def build_data_quality(
             "category": "供应链",
             "status": _source_status(count_1688, guarded=True),
             "count": count_1688,
-            "note": "需要有效会话 Cookie；无会话时不生成模拟数据",
+            "note": "账户授权采集的 1688 供应商、MOQ 和报价信号",
         },
         {
             "key": "ec21",
@@ -174,7 +174,7 @@ def build_data_quality(
     if not amazon_review_clusters and not reddit_clusters:
         gaps.append("真实评论/社区痛点不足，痛点部分更多依赖 listing、专利和搜索词信号。")
     if count_1688 == 0:
-        gaps.append("1688 需要有效会话 Cookie；当前未使用 1688 数据，也未生成模拟供应商。")
+        gaps.append("1688 暂未形成有效供应链证据；可在设置页连接账户会话后重新生成。")
     if real_gap_clusters:
         gaps.append("存在真实来源缺口提示，建议补采评论、竞品或供应商后再做高成本决策。")
     if not agent_available:

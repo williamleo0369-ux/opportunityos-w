@@ -22,6 +22,21 @@ const formatDateTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
+const sourceCredentialLabel = (source?: SourceCredentialStatus | null) => {
+  if (!source?.configured) return "未连接";
+  if (source.available) return "可用";
+  if (source.status === "guarded") return "需重新登录";
+  if (source.status === "reachable_empty") return "已连接，待复核";
+  if (source.status === "missing_session" || source.status === "missing_credentials") return "未连接";
+  return "需检测";
+};
+
+const sourceCredentialTone = (source?: SourceCredentialStatus | null) => {
+  if (source?.available) return "bg-indigo/10 text-indigo";
+  if (source?.configured) return "bg-amber-50 text-amber-700";
+  return "bg-field text-muted";
+};
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -270,17 +285,23 @@ export default function SettingsPage() {
             <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-4">
                 <div>
-                  <p className="font-medium text-ink">1688 会话 Cookie</p>
-                  <p className="mt-1 text-sm text-muted">加密保存到当前账户，后台 worker 将在真实供应链采集中使用。</p>
+                  <p className="font-medium text-ink">1688 真实供应链采集</p>
+                  <p className="mt-1 text-sm text-muted">加密保存当前账户的 1688 会话，用于下一次机会分析中的真实供应商采集。</p>
                 </div>
-                <span className={credential1688?.available ? "rounded-md bg-indigo/10 px-2 py-0.5 text-xs font-semibold text-indigo" : "rounded-md bg-clay/10 px-2 py-0.5 text-xs font-semibold text-clay"}>
-                  {credential1688?.source === "account" ? "ACCOUNT" : credential1688?.source === "environment" ? "ENV" : "OFF"}
+                <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${sourceCredentialTone(credential1688)}`}>
+                  {sourceCredentialLabel(credential1688)}
                 </span>
+              </div>
+              <div className="mb-3 rounded-lg border border-line bg-field/70 px-3 py-2 text-xs leading-5 text-muted">
+                <p className="font-semibold text-ink">如何获取 Cookie</p>
+                <p>1. 在浏览器登录 1688，搜索任意商品。</p>
+                <p>2. 打开开发者工具 Network，点击搜索请求。</p>
+                <p>3. 复制 Request Headers 里的 Cookie 整行，粘贴到下方保存并检测。</p>
               </div>
               <textarea
                 value={cookie1688}
                 onChange={(event) => setCookie1688(event.target.value)}
-                placeholder="粘贴从浏览器复制的 1688 Cookie"
+                placeholder="粘贴 1688 Cookie，或粘贴包含 Cookie: 的完整请求头"
                 spellCheck={false}
                 className="focus-ring min-h-24 w-full resize-y rounded-lg border border-line bg-field px-3 py-2 font-mono text-xs text-ink placeholder:text-muted/70"
               />
@@ -303,11 +324,16 @@ export default function SettingsPage() {
                 </button>
               </div>
               {credential1688 ? (
-                <p className="mt-3 text-xs leading-5 text-muted">
-                  状态：<span className="font-semibold text-ink">{credential1688.status ?? "unknown"}</span>
-                  {credential1688.reason ? ` · ${credential1688.reason}` : ""}
-                  {credential1688.checked_at ? ` · 检测于 ${formatDateTime(credential1688.checked_at)}` : ""}
-                </p>
+                <div className="mt-3 rounded-lg bg-field/70 px-3 py-2 text-xs leading-5 text-muted">
+                  <p>
+                    凭据来源：<span className="font-semibold text-ink">{credential1688.source === "account" ? "当前账户" : credential1688.source === "environment" ? "环境变量" : "未配置"}</span>
+                    {credential1688.checked_at ? ` · 检测于 ${formatDateTime(credential1688.checked_at)}` : ""}
+                  </p>
+                  <p className="mt-1">
+                    检测结果：<span className="font-semibold text-ink">{sourceCredentialLabel(credential1688)}</span>
+                    {credential1688.reason ? ` · ${credential1688.reason}` : ""}
+                  </p>
+                </div>
               ) : null}
             </div>
             <label className="flex items-center justify-between gap-4 rounded-xl border border-line bg-white p-4 shadow-sm">

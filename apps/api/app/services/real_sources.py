@@ -156,6 +156,15 @@ def _parse_price_range(value: str | None) -> tuple[float, float]:
     return min(numbers[:2]), max(numbers[:2])
 
 
+def _decode_escaped_text(value: str) -> str:
+    value = html.unescape(value).replace("\\\\/", "/").replace("\\/", "/").replace("\\\\u", "\\u")
+    return re.sub(
+        r"\\u([0-9a-fA-F]{4})",
+        lambda match: chr(int(match.group(1), 16)),
+        value,
+    )
+
+
 def _absolute_url(value: str | None) -> str:
     if not value:
         return ""
@@ -170,12 +179,47 @@ def _absolute_url(value: str | None) -> str:
 def _absolute_1688_url(value: str | None) -> str:
     if not value:
         return ""
-    value = html.unescape(value)
+    value = _decode_escaped_text(value).strip()
     if value.startswith("//"):
         return f"https:{value}"
     if value.startswith("/"):
         return f"https://www.1688.com{value}"
     return value
+
+
+def normalize_1688_cookie(value: str) -> str:
+    """Accept a raw Cookie header or browser-copied header block and keep only cookie pairs."""
+    raw = value.strip()
+    if not raw:
+        return ""
+    if "\n" not in raw and raw.lower().startswith("cookie:"):
+        raw = raw.split(":", 1)[1].strip()
+    lines = raw.splitlines() or [raw]
+    cookie_lines = [line for line in lines if line.strip().lower().startswith("cookie:")]
+    source_lines = cookie_lines or lines
+    pairs: list[str] = []
+    for line in source_lines:
+        candidate = line.strip()
+        if not candidate:
+            continue
+        if candidate.lower().startswith("cookie:"):
+            candidate = candidate.split(":", 1)[1].strip()
+        if ":" in candidate and ";" not in candidate and "=" not in candidate.split(":", 1)[0]:
+            continue
+        for part in candidate.split(";"):
+            item = part.strip()
+            if not item or "=" not in item:
+                continue
+            name, item_value = item.split("=", 1)
+            name = name.strip()
+            if not name or any(char.isspace() for char in name):
+                continue
+            pairs.append(f"{name}={item_value.strip()}")
+    deduped: dict[str, str] = {}
+    for pair in pairs:
+        name = pair.split("=", 1)[0]
+        deduped[name] = pair
+    return "; ".join(deduped.values())
 
 
 def _month_keys(count: int = 12) -> list[str]:
@@ -793,7 +837,8 @@ def collect_alibaba_supply_chain(keyword: str, limit: int = 8) -> list[SupplySig
 
 
 def _1688_cookie(cookie: str | None = None) -> str:
-    return cookie.strip() if cookie is not None else get_1688_cookie()
+    raw_cookie = cookie.strip() if cookie is not None else get_1688_cookie()
+    return normalize_1688_cookie(raw_cookie)
 
 
 def has_1688_session(cookie: str | None = None) -> bool:
@@ -835,14 +880,24 @@ def _1688_blocked(text: str) -> bool:
 def _collect_1688_cards(text: str, search_url: str, limit: int) -> list[SupplySignal]:
     rows: list[SupplySignal] = []
     seen: set[str] = set()
-    for match in re.finditer(r'(?:"(?:detailUrl|offerUrl|url)"\s*:\s*"|href=")([^"]*detail\.1688\.com/offer/(\d+)\.html[^"]*)', text, re.S):
-        product_url = _absolute_1688_url(match.group(1).replace("\\/", "/"))
+    normalized_text = _decode_escaped_text(text)
+    offer_pattern = re.compile(
+        r'(?:"(?:detailUrl|offerUrl|url|auctionURL|productUrl)"\s*:\s*"|href="|data-url=")'
+        r'([^"]*(?:detail\.1688\.com/offer/|offer/)(\d+)\.html[^"]*)',
+        re.S,
+    )
+    for match in offer_pattern.finditer(normalized_text):
+        product_url = _absolute_1688_url(match.group(1))
+        if "detail.1688.com" not in product_url:
+            product_url = f"https://detail.1688.com/offer/{match.group(2)}.html"
         if product_url in seen:
             continue
         seen.add(product_url)
-        block = text[max(0, match.start() - 3500) : min(len(text), match.end() + 5500)]
+        block = normalized_text[max(0, match.start() - 4500) : min(len(normalized_text), match.end() + 7000)]
         title_patterns = [
-            r'"(?:subject|title|offerTitle)"\s*:\s*"([^"]+)"',
+            r'"(?:subject|title|offerTitle|titleText|subjectTrans|offerSubject)"\s*:\s*"([^"]+)"',
+            r'"information"\s*:\s*\{[^{}]*"subject"\s*:\s*"([^"]+)"',
+            r'<a[^>]+href="[^"]*offer/' + re.escape(match.group(2)) + r'\.html[^"]*"[^>]*>(.*?)</a>',
             r'title="([^"]{8,180})"',
             r'alt="([^"]{8,180})"',
         ]
@@ -850,33 +905,38 @@ def _collect_1688_cards(text: str, search_url: str, limit: int) -> list[SupplySi
         for pattern in title_patterns:
             title_match = re.search(pattern, block, re.S)
             if title_match:
-                product_title = _strip_tags(title_match.group(1).replace("\\/", "/"))
+                product_title = _strip_tags(_decode_escaped_text(title_match.group(1)))
                 break
-        if not product_title or "1688" in product_title.lower():
+        if not product_title or "1688" in product_title.lower() or len(product_title) < 4:
             continue
 
         supplier_match = (
-            re.search(r'"(?:companyName|sellerNick|memberName|shopName)"\s*:\s*"([^"]+)"', block, re.S)
+            re.search(r'"(?:companyName|sellerNick|memberName|shopName|sellerName|supplierName|loginId)"\s*:\s*"([^"]+)"', block, re.S)
             or re.search(r'title="([^"]{4,120}(?:公司|厂|商行|店))"', block, re.S)
         )
-        supplier_name = _strip_tags(supplier_match.group(1)) if supplier_match else "1688 supplier"
-        supplier_url_match = re.search(r'(?:"(?:sellerUrl|shopUrl)"\s*:\s*"|href=")([^"]*(?:shop|page|company)[^"]*1688\.com[^"]*)', block, re.S)
-        supplier_url = _absolute_1688_url(supplier_url_match.group(1).replace("\\/", "/")) if supplier_url_match else ""
+        supplier_name = _strip_tags(_decode_escaped_text(supplier_match.group(1))) if supplier_match else "1688 supplier"
+        supplier_url_match = re.search(
+            r'(?:"(?:sellerUrl|shopUrl|companyUrl|shopRepurchaseUrl)"\s*:\s*"|href=")([^"]*(?:shop|page|company|winport)[^"]*(?:1688|alibaba)\.com[^"]*)',
+            block,
+            re.S,
+        )
+        supplier_url = _absolute_1688_url(supplier_url_match.group(1)) if supplier_url_match else ""
         price_match = (
-            re.search(r'"(?:price|priceRange|discountPrice)"\s*:\s*"([^"]+)"', block, re.S)
+            re.search(r'"(?:price|priceRange|discountPrice|discountPriceRange|salePrice)"\s*:\s*"?([^",}\]]+)', block, re.S)
             or re.search(r'¥\s*([\d.]+(?:\s*[-~]\s*[\d.]+)?)', block)
+            or re.search(r'￥\s*([\d.]+(?:\s*[-~]\s*[\d.]+)?)', block)
         )
         price_text = price_match.group(1) if price_match else ""
         price_min, price_max = _parse_price_range(price_text)
         price_min = round(price_min * CNY_TO_USD_ESTIMATE, 2) if price_min else 0.0
         price_max = round(price_max * CNY_TO_USD_ESTIMATE, 2) if price_max else 0.0
         moq_match = (
-            re.search(r'"(?:minOrderQuantity|beginAmount|minOrder)"\s*:\s*"?(\d+)', block, re.S)
+            re.search(r'"(?:minOrderQuantity|beginAmount|minOrder|quantityBegin|startAmount)"\s*:\s*"?(\d+)', block, re.S)
             or re.search(r'(\d+)\s*(?:件|个|只|套|pcs|pieces)', block, re.I)
         )
         moq = _parse_number(moq_match.group(1) if moq_match else None)
-        image_match = re.search(r'(?:"(?:imageUrl|picUrl|imgUrl)"\s*:\s*"|src=")([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)', block, re.I)
-        image_url = _absolute_1688_url(image_match.group(1).replace("\\/", "/")) if image_match else ""
+        image_match = re.search(r'(?:"(?:imageUrl|picUrl|imgUrl|offerPicUrl)"\s*:\s*"|src=")([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)', block, re.I)
+        image_url = _absolute_1688_url(image_match.group(1)) if image_match else ""
         score = 48
         if price_min or price_max:
             score += 16
@@ -895,7 +955,7 @@ def _collect_1688_cards(text: str, search_url: str, limit: int) -> list[SupplySi
                 unit_price_max=price_max,
                 moq=moq,
                 location="China",
-                supplier_url=supplier_url,
+                supplier_url=supplier_url or product_url,
                 product_url=product_url,
                 production_maturity_score=min(94, score),
                 logistics_note="1688 session-backed listing, original price converted from CNY estimate",
@@ -952,12 +1012,12 @@ def probe_1688_supply_status(
     except Exception as exc:
         return {"available": False, "status": "error", "reason": str(exc), "url": url}
     if _1688_blocked(text):
-        return {"available": False, "status": "guarded", "reason": "1688 returned anti-bot verification page; refresh the configured session cookie", "url": url}
+        return {"available": False, "status": "guarded", "reason": "1688 返回安全验证页，请重新登录 1688 后刷新 Cookie", "url": url}
     rows = _collect_1688_cards(text, url, 1)
     return {
         "available": bool(rows),
         "status": "ok" if rows else "reachable_empty",
-        "reason": "session-backed collection available" if rows else "reachable but no structured offer rows parsed",
+        "reason": "会话有效，已可采集 1688 供应商" if rows else "会话可访问，但当前关键词未解析到结构化供应商",
         "url": url,
     }
 

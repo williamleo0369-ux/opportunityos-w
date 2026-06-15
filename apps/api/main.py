@@ -80,7 +80,7 @@ from app.services.exporters import (
 from app.services.data_quality import build_data_quality
 from app.services.health_scheduler import SourceHealthScheduler
 from app.services.pipeline import build_report, run_pipeline
-from app.services.real_sources import probe_1688_supply_status
+from app.services.real_sources import normalize_1688_cookie, probe_1688_supply_status
 from app.services.redis_url import resolve_redis_url, safe_redis_url
 from app.services.source_credentials import (
     CredentialDecryptionError,
@@ -1115,10 +1115,13 @@ def set_1688_credentials(
     request: SourceCredentialRequest,
     user: User = Depends(current_user),
 ) -> dict[str, object]:
-    status = probe_1688_supply_status("pet water fountain", cookie=request.cookie)
+    cookie = normalize_1688_cookie(request.cookie)
+    if len(cookie) < 8:
+        raise HTTPException(status_code=400, detail="请粘贴有效的 1688 Cookie")
+    status = probe_1688_supply_status("pet water fountain", cookie=cookie)
     save_1688_cookie(
         user.id,
-        request.cookie,
+        cookie,
         _credential_metadata(status),
     )
     return credential_1688_status(user.id, status, "account")

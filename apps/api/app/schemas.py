@@ -313,7 +313,7 @@ class SourceHealthSchedulerRequest(BaseModel):
 
 
 class SourceCredentialRequest(BaseModel):
-    cookie: str = Field(min_length=8, max_length=20000)
+    cookie: str = Field(min_length=8, max_length=60000)
 
 
 class AdminUserUpdate(BaseModel):

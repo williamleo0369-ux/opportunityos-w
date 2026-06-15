@@ -32,7 +32,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { EmptyState, MetricCard, ScoreBar, Section } from "@/components/ui";
-import { API_BASE_URL, api, type OpportunityDetail } from "@/lib/api";
+import { API_BASE_URL, api, type DataQualitySource, type OpportunityDetail } from "@/lib/api";
 
 const recommendationLabels = {
   not_recommended: "不推荐",
@@ -136,10 +136,37 @@ function sourceStatusLabel(value: string) {
   return labels[value] ?? value;
 }
 
+function sourcePublicStatusLabel(value: string) {
+  if (value === "ok") return "已验证";
+  if (value === "empty") return "暂无证据";
+  if (value === "guarded" || value === "missing_credentials" || value === "not_recorded") return "待补证据";
+  if (value === "timeout") return "待复核";
+  return "待复核";
+}
+
 function sourceStatusClass(value: string) {
   if (value === "ok") return "border-indigo/15 bg-indigo/10 text-indigo";
   if (value === "guarded" || value === "missing_credentials" || value === "not_recorded") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-clay/20 bg-clay/10 text-clay";
+}
+
+function sourceEvidenceLabel(source: DataQualitySource) {
+  return source.count > 0 ? `${source.count} 条证据` : "暂未形成有效证据";
+}
+
+function sourcePublicNote(source: DataQualitySource) {
+  if (source.count > 0) return source.note;
+  if (source.status === "empty") return "该来源本次未检索到足够相关的公开信号，暂不参与增强评分。";
+  if (source.status === "guarded" || source.status === "missing_credentials") {
+    return "该来源需要进一步授权或补充数据后才能纳入研判，当前不会影响核心结论。";
+  }
+  if (source.status === "timeout") return "该来源本次响应不稳定，建议后续重新采集后再复核。";
+  return "该来源暂未提供可用于决策的有效证据，当前仅作为后续补证方向。";
+}
+
+function sourceDecisionNote(source: DataQualitySource) {
+  if (source.count > 0) return "已纳入当前评分、机会判断与验证计划。";
+  return "暂不纳入评分，仅作为后续补充证据的参考方向。";
 }
 
 export default function OpportunityDetailPage() {
@@ -553,7 +580,7 @@ export default function OpportunityDetailPage() {
                       </div>
                       <span className="flex shrink-0 items-center gap-2">
                         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${sourceStatusClass(source.status)}`}>
-                          {sourceStatusLabel(source.status)}
+                          {sourcePublicStatusLabel(source.status)}
                         </span>
                         <ChevronDown
                           size={15}
@@ -561,19 +588,25 @@ export default function OpportunityDetailPage() {
                         />
                       </span>
                     </div>
-                    <p className="text-sm font-semibold text-indigo">{source.count} signals</p>
+                    <p className="text-sm font-semibold text-indigo">{sourceEvidenceLabel(source)}</p>
                     <p className={`mt-2 text-xs leading-5 text-muted ${expanded ? "" : "line-clamp-2"}`}>
-                      {source.note}
+                      {sourcePublicNote(source)}
                     </p>
                     <span className="mt-3 inline-flex text-xs font-semibold text-indigo opacity-80 transition group-hover:opacity-100">
                       {expanded ? "收起来源说明" : "展开来源说明"}
                     </span>
                     {expanded ? (
                       <div className="mt-3 rounded-lg bg-field px-3 py-2 text-xs leading-5 text-muted">
-                        <p>
-                          决策使用：{source.count > 0 ? "可纳入当前评分与验证计划。" : "当前只作为缺口提示，不直接增强评分。"}
-                        </p>
-                        <p className="mt-1">状态码：{source.status}</p>
+                        <p>研判影响：{sourceDecisionNote(source)}</p>
+                        {user?.role === "admin" ? (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer font-semibold text-ink">采集诊断</summary>
+                            <div className="mt-2 rounded-md bg-white px-2 py-2">
+                              <p>原始状态：{sourceStatusLabel(source.status)}</p>
+                              <p className="mt-1">原始说明：{source.note}</p>
+                            </div>
+                          </details>
+                        ) : null}
                       </div>
                     ) : null}
                   </button>

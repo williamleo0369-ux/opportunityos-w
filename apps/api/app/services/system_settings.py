@@ -45,7 +45,7 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "deepseek": {
         "label": "DeepSeek",
         "protocol": "openai",
-        "default_model": "deepseek-chat",
+        "default_model": "deepseek-v4-flash",
         "default_base_url": "https://api.deepseek.com",
     },
     "anthropic": {
@@ -261,6 +261,9 @@ def save_llm_settings(payload: dict[str, Any]) -> dict[str, Any]:
     payload["model"] = str(payload.get("model") or preset["default_model"]).strip()
     payload["base_url"] = str(payload.get("base_url") or preset["default_base_url"]).strip().rstrip("/")
     encrypted = str(current.get("encrypted_secret") or "") if current else ""
+    current_payload = dict(current.get("payload", {})) if current else {}
+    if encrypted and not api_key and str(current_payload.get("provider") or "").strip().lower() not in {"", provider}:
+        raise ValueError("切换 Provider 时必须输入新的 API Key，避免复用其他供应商的 Key")
     if api_key:
         encrypted = _cipher().encrypt(api_key.encode("utf-8")).decode("ascii")
     if payload.get("enabled", True) and not encrypted:

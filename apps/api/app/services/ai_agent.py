@@ -463,9 +463,12 @@ def _call_openai(config: LlmProviderConfig, prompt: str, max_tokens: int) -> Pro
         method="POST",
     )
     started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=llm_timeout_seconds(), context=SSL_CONTEXT) as response:
-        data = json.loads(response.read().decode("utf-8"))
-        request_id = response.headers.get("x-request-id")
+    try:
+        with urllib.request.urlopen(request, timeout=llm_timeout_seconds(), context=SSL_CONTEXT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            request_id = response.headers.get("x-request-id")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(_provider_http_error(exc)) from exc
     usage = data.get("usage", {})
     return ProviderResponse(
         text=str(data["choices"][0]["message"]["content"]),
@@ -495,9 +498,12 @@ def _call_anthropic(config: LlmProviderConfig, prompt: str, max_tokens: int) -> 
         method="POST",
     )
     started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=llm_timeout_seconds(), context=SSL_CONTEXT) as response:
-        data = json.loads(response.read().decode("utf-8"))
-        request_id = response.headers.get("request-id")
+    try:
+        with urllib.request.urlopen(request, timeout=llm_timeout_seconds(), context=SSL_CONTEXT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            request_id = response.headers.get("request-id")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(_provider_http_error(exc)) from exc
     parts = data.get("content", [])
     usage = data.get("usage", {})
     return ProviderResponse(
@@ -507,6 +513,15 @@ def _call_anthropic(config: LlmProviderConfig, prompt: str, max_tokens: int) -> 
         request_id=request_id or data.get("id"),
         latency_ms=round((time.perf_counter() - started) * 1000),
     )
+
+
+def _provider_http_error(exc: urllib.error.HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+    details = body[:300] if body else exc.reason
+    return f"HTTP {exc.code}: {details}"
 
 
 def _system_instruction() -> str:

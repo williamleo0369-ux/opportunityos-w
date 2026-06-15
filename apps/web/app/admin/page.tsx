@@ -43,7 +43,7 @@ const fallbackProviders = [
     value: "deepseek",
     label: "DeepSeek",
     protocol: "openai",
-    default_model: "deepseek-chat",
+    default_model: "deepseek-v4-flash",
     default_base_url: "https://api.deepseek.com",
   },
   {
@@ -78,9 +78,9 @@ const fallbackProviders = [
 
 const emptyLlmForm: LlmForm = {
   enabled: true,
-  provider: "anthropic",
-  model: "glm-5",
-  base_url: "https://api.anthropic.com",
+  provider: "deepseek",
+  model: "deepseek-v4-flash",
+  base_url: "https://api.deepseek.com",
   api_key: "",
   input_usd_per_million: "",
   output_usd_per_million: "",

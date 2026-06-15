@@ -105,7 +105,7 @@ Optional real-source credentials:
 
 - `OPPORTUNITY_OS_DATABASE_URL`: optional database connection URL. Defaults to local SQLite; use the Docker Compose PostgreSQL URL above for a shared database.
 - `OPPORTUNITY_OS_1688_COOKIE`: authenticated 1688 browser cookie string. If unset or expired, 1688 is reported as guarded/missing-session and no synthetic 1688 supplier rows are generated.
-- `OPENAI_API_KEY` plus optional `OPENAI_MODEL`/`OPENAI_BASE_URL`, `DEEPSEEK_API_KEY` plus optional `DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL`, `ZHIPU_API_KEY` plus optional `ZHIPU_MODEL`/`ZHIPU_BASE_URL`, or `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` plus optional `ANTHROPIC_MODEL`/`ANTHROPIC_BASE_URL`: enables the LLM agent. Admins can also configure the provider, model, Base URL, and API key from `/admin`; saved keys are encrypted.
+- `OPENAI_API_KEY` plus optional `OPENAI_MODEL`/`OPENAI_BASE_URL`, `DEEPSEEK_API_KEY` plus optional `DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL`, `ZHIPU_API_KEY` plus optional `ZHIPU_MODEL`/`ZHIPU_BASE_URL`, or `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` plus optional `ANTHROPIC_MODEL`/`ANTHROPIC_BASE_URL`: enables the LLM agent. Admins can also configure the provider, model, Base URL, and API key from `/admin`; saved keys are encrypted. The default DeepSeek model is `deepseek-v4-flash` with Base URL `https://api.deepseek.com`.
 - `OPPORTUNITY_OS_LLM_PROVIDER`: optional `auto`, `openai`, `deepseek`, `anthropic`, or `zhipu`; defaults to `auto`.
 - `OPPORTUNITY_OS_LLM_TIMEOUT_SECONDS`: optional LLM request timeout, defaults to `25`; timed-out agent calls fall back to evidence-based rule output.
 - `OPPORTUNITY_OS_AGENT_PARALLELISM`: specialist Agent concurrency from `1` to `3`; defaults to `1` to respect rate-limited model gateways.

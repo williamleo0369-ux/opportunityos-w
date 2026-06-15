@@ -118,6 +118,12 @@ function confidenceLabel(value: string) {
   return "低可信";
 }
 
+function confidenceUserNote(value: string) {
+  if (value === "high") return "证据覆盖较完整，可直接进入验证计划。";
+  if (value === "medium") return "证据足以支持初步判断，建议用下方验证计划继续确认关键假设。";
+  return "当前只适合作为早期观察信号，建议先补充需求、竞品或供应链证据后再投入。";
+}
+
 function sourceStatusLabel(value: string) {
   const labels: Record<string, string> = {
     ok: "已采集",
@@ -575,17 +581,25 @@ export default function OpportunityDetailPage() {
               })}
             </div>
           </div>
-          {detail.data_quality.gaps.length ? (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-800">需要补强的证据</p>
+          <div className="mt-4 rounded-xl border border-line bg-field/70 p-4">
+            <p className="text-sm font-semibold text-ink">可信度提示</p>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              {confidenceUserNote(detail.data_quality.confidence_level)}
+            </p>
+          </div>
+          {user?.role === "admin" && detail.data_quality.gaps.length ? (
+            <details className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-amber-800">
+                内部诊断：证据缺口 {detail.data_quality.gaps.length} 项
+              </summary>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {detail.data_quality.gaps.slice(0, 6).map((gap) => (
+                {detail.data_quality.gaps.map((gap) => (
                   <p key={gap} className="text-sm leading-6 text-amber-800/80">
                     {gap}
                   </p>
                 ))}
               </div>
-            </div>
+            </details>
           ) : null}
         </Section>
       </div>

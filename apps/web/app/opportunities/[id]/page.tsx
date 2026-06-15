@@ -7,6 +7,7 @@ import {
   BadgeDollarSign,
   Bookmark,
   BookmarkCheck,
+  ChevronDown,
   CheckCircle2,
   CircleAlert,
   Database,
@@ -143,6 +144,7 @@ export default function OpportunityDetailPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [expandedValidation, setExpandedValidation] = useState("需求验证");
 
   useEffect(() => {
     if (!user) return;
@@ -399,15 +401,39 @@ export default function OpportunityDetailPage() {
           <div className="grid gap-3 md:grid-cols-3">
             {validationSteps.map((step) => {
               const Icon = step.icon;
+              const expanded = expandedValidation === step.label;
               return (
-                <div key={step.label} className="rounded-xl border border-line bg-gradient-to-br from-white to-field/70 p-4">
-                  <div className="mb-4 flex items-center justify-between">
+                <button
+                  key={step.label}
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setExpandedValidation((current) =>
+                      current === step.label ? "" : step.label,
+                    )
+                  }
+                  className={`focus-ring group h-full rounded-xl border bg-gradient-to-br p-4 text-left transition hover:-translate-y-0.5 hover:border-indigo/30 hover:shadow-panel ${
+                    expanded ? "border-indigo/30 from-white to-indigo/5 shadow-panel" : "border-line from-white to-field/70"
+                  }`}
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
                     <span className="rounded-full bg-indigo/10 px-2.5 py-1 text-xs font-bold text-indigo">{step.label}</span>
-                    <Icon size={18} className="text-indigo" />
+                    <span className="flex items-center gap-2 text-indigo">
+                      <Icon size={18} />
+                      <ChevronDown
+                        size={16}
+                        className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+                      />
+                    </span>
                   </div>
                   <p className="text-sm font-semibold leading-6 text-ink">{step.title}</p>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted">{step.detail}</p>
-                </div>
+                  <p className={`mt-2 text-sm leading-6 text-muted ${expanded ? "" : "line-clamp-3"}`}>
+                    {step.detail}
+                  </p>
+                  <span className="mt-3 inline-flex text-xs font-semibold text-indigo opacity-80 transition group-hover:opacity-100">
+                    {expanded ? "收起详情" : "展开完整验证依据"}
+                  </span>
+                </button>
               );
             })}
           </div>

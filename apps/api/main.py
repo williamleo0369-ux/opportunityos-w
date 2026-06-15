@@ -884,6 +884,9 @@ def admin_update_user(
         changes.get("role") == "user" or changes.get("is_active") is False
     ):
         raise HTTPException(status_code=400, detail="不能停用或取消自己的管理员权限")
+    new_password = str(changes.pop("password", "") or "").strip()
+    if new_password:
+        changes["password_hash"] = hash_password(new_password)
     payload.update(changes)
     payload["updated_at"] = utc_now().isoformat()
     upsert_user_payload(payload)

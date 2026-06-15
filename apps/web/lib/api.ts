@@ -578,7 +578,9 @@ export const api = {
   },
   updateAdminUser(
     id: string,
-    payload: Partial<Pick<User, "username" | "plan" | "role" | "is_active" | "search_quota_daily" | "report_quota_monthly">>,
+    payload: Partial<Pick<User, "username" | "plan" | "role" | "is_active" | "search_quota_daily" | "report_quota_monthly">> & {
+      password?: string;
+    },
   ) {
     return request<AdminUserRecord>(`/api/admin/users/${id}`, {
       method: "PATCH",

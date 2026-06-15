@@ -103,6 +103,7 @@ export default function AdminPage() {
   const [llmForm, setLlmForm] = useState<LlmForm>(emptyLlmForm);
   const [loading, setLoading] = useState(true);
   const [savingUser, setSavingUser] = useState("");
+  const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [savingLlm, setSavingLlm] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testResult, setTestResult] = useState<AdminLlmTestResult | null>(null);
@@ -175,10 +176,12 @@ export default function AdminPage() {
         is_active: record.user.is_active,
         search_quota_daily: Number(record.user.search_quota_daily),
         report_quota_monthly: Number(record.user.report_quota_monthly),
+        password: passwordDrafts[record.user.id]?.trim() || undefined,
       });
       setUsers((current) =>
         current.map((item) => (item.user.id === updated.user.id ? updated : item)),
       );
+      setPasswordDrafts((current) => ({ ...current, [record.user.id]: "" }));
       if (updated.user.id === user?.id) {
         await refreshAuth();
       }
@@ -289,12 +292,13 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-line text-xs text-muted">
                   <th className="px-3 py-3 font-semibold">用户</th>
                   <th className="px-3 py-3 font-semibold">套餐</th>
                   <th className="px-3 py-3 font-semibold">权限</th>
+                  <th className="px-3 py-3 font-semibold">重置密码</th>
                   <th className="px-3 py-3 font-semibold">每日搜索</th>
                   <th className="px-3 py-3 font-semibold">每月报告</th>
                   <th className="px-3 py-3 font-semibold">实际使用</th>
@@ -340,6 +344,22 @@ export default function AdminPage() {
                         <option value="user">用户</option>
                         <option value="admin">管理员</option>
                       </select>
+                    </td>
+                    <td className="px-3 py-4">
+                      <input
+                        type="password"
+                        minLength={8}
+                        value={passwordDrafts[record.user.id] ?? ""}
+                        onChange={(event) =>
+                          setPasswordDrafts((current) => ({
+                            ...current,
+                            [record.user.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="留空不修改"
+                        autoComplete="new-password"
+                        className="focus-ring w-32 rounded-md border border-line bg-white px-2.5 py-2 text-ink placeholder:text-muted"
+                      />
                     </td>
                     <td className="px-3 py-4">
                       <input

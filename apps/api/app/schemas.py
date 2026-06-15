@@ -319,6 +319,7 @@ class SourceCredentialRequest(BaseModel):
 class AdminUserUpdate(BaseModel):
     username: str | None = Field(default=None, min_length=2, max_length=80)
     plan: str | None = Field(default=None, min_length=2, max_length=40)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     role: Literal["user", "admin"] | None = None
     is_active: bool | None = None
     search_quota_daily: int | None = Field(default=None, ge=0, le=100000)

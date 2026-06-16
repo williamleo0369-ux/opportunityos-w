@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Archive, ArrowDownUp, CheckCircle2, CircleDashed, Download, FileText, Gauge, Loader2, Search, SlidersHorizontal } from "lucide-react";
+import { Archive, ArrowDownUp, CheckCircle2, CircleDashed, Download, FileText, Gauge, Loader2, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { EmptyState, MetricCard, Section } from "@/components/ui";
@@ -36,20 +36,42 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [taskAction, setTaskAction] = useState("");
+  const [taskError, setTaskError] = useState("");
+  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scoreFilter, setScoreFilter] = useState<"all" | "strong" | "watch" | "risky">("all");
   const [sortBy, setSortBy] = useState<"newest" | "score">("newest");
 
-  useEffect(() => {
-    if (!user) return;
+  const refreshWorkspace = async () => {
     setLoading(true);
-    Promise.all([api.listReports().catch(() => []), api.listTasks().catch(() => [])])
+    await Promise.all([api.listReports().catch(() => []), api.listTasks().catch(() => [])])
       .then(([reportRows, taskRows]) => {
         setReports(reportRows);
         setTasks(taskRows);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    void refreshWorkspace();
   }, [user]);
+
+  const retryTask = async (taskId: string) => {
+    setRetryingTaskId(taskId);
+    setTaskError("");
+    setTaskAction("");
+    try {
+      const created = await api.retryTask(taskId);
+      setTaskAction(`重试任务已进入队列：${created.task_id.slice(0, 8)}`);
+      await refreshWorkspace();
+    } catch (err) {
+      setTaskError(err instanceof Error ? err.message : "重试任务失败");
+    } finally {
+      setRetryingTaskId(null);
+    }
+  };
 
   const filteredReports = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -116,6 +138,11 @@ export default function ReportsPage() {
             ))}
           </div>
           <div className="mt-4 space-y-2">
+            {taskAction || taskError ? (
+              <div className={`rounded-xl border px-3 py-2 text-sm ${taskError ? "border-clay/20 bg-clay/10 text-clay" : "border-indigo/15 bg-indigo/10 text-indigo"}`}>
+                {taskError || taskAction}
+              </div>
+            ) : null}
             {tasks.slice(0, 4).map((task) => (
               <div key={task.id} className="rounded-xl border border-line/80 bg-field/50 p-3">
                 <div className="mb-2 flex items-center justify-between gap-3 text-sm">
@@ -123,8 +150,22 @@ export default function ReportsPage() {
                     {task.status === "completed" ? <CheckCircle2 className="shrink-0 text-indigo" size={16} /> : <CircleDashed className="shrink-0 text-muted" size={16} />}
                     <span className="truncate">{task.keyword}</span>
                   </span>
-                  <span className="shrink-0 text-muted">{statusLabels[task.status] ?? task.status}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-muted">{statusLabels[task.status] ?? task.status}</span>
+                    {task.status === "failed" || task.status === "cancelled" ? (
+                      <button
+                        type="button"
+                        onClick={() => void retryTask(task.id)}
+                        disabled={retryingTaskId === task.id}
+                        className="focus-ring inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-semibold text-ink transition hover:border-indigo/40 disabled:opacity-60"
+                      >
+                        {retryingTaskId === task.id ? <Loader2 className="animate-spin" size={12} /> : <RotateCcw size={12} />}
+                        重试
+                      </button>
+                    ) : null}
+                  </span>
                 </div>
+                {task.error_message ? <p className="mb-2 line-clamp-2 text-xs leading-5 text-clay">{task.error_message}</p> : null}
                 <div className="h-1.5 overflow-hidden rounded-full bg-ink/10">
                   <div className="h-full rounded-full bg-gradient-to-r from-indigo to-violet" style={{ width: `${Math.max(0, Math.min(100, task.progress))}%` }} />
                 </div>

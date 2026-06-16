@@ -24,7 +24,7 @@ Create these services from the same GitHub repository:
      - `OPPORTUNITY_OS_COOKIE_SAMESITE=lax`
      - `OPPORTUNITY_OS_CORS_ORIGINS=https://<your-web-service>.up.railway.app`
      - `OPPORTUNITY_OS_ADMIN_EMAILS=<your-admin-email>`
-     - Optional AI provider keys: `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `ZHIPU_API_KEY`
+     - Optional AI provider keys: `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `ZHIPU_API_KEY`
 
 3. `opportunityos-worker`
    - Dockerfile path: `apps/api/Dockerfile`

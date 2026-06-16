@@ -47,6 +47,13 @@ const fallbackProviders = [
     default_base_url: "https://api.deepseek.com",
   },
   {
+    value: "gemini",
+    label: "Google Gemini",
+    protocol: "openai",
+    default_model: "gemini-2.5-flash",
+    default_base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+  },
+  {
     value: "anthropic",
     label: "Claude / Anthropic",
     protocol: "anthropic",

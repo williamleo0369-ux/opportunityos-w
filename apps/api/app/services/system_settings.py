@@ -48,6 +48,12 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
         "default_model": "deepseek-v4-flash",
         "default_base_url": "https://api.deepseek.com",
     },
+    "gemini": {
+        "label": "Google Gemini",
+        "protocol": "openai",
+        "default_model": "gemini-2.5-flash",
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    },
     "anthropic": {
         "label": "Claude / Anthropic",
         "protocol": "anthropic",
@@ -88,6 +94,7 @@ def _environment_config() -> LlmProviderConfig | None:
     requested = os.getenv("OPPORTUNITY_OS_LLM_PROVIDER", "auto").strip().lower()
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     deepseek_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", "")).strip()
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_AUTH_TOKEN", "")).strip()
     zhipu_key = os.getenv("ZHIPU_API_KEY", os.getenv("GLM_API_KEY", "")).strip()
     if requested in {"openai", "auto"} and openai_key:
@@ -112,6 +119,19 @@ def _environment_config() -> LlmProviderConfig | None:
             model=os.getenv("DEEPSEEK_MODEL", preset["default_model"]).strip(),
             base_url=os.getenv("DEEPSEEK_BASE_URL", preset["default_base_url"]).rstrip("/"),
             api_key=deepseek_key,
+            source="environment",
+            input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
+            output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+        )
+    if requested in {"gemini", "google", "auto"} and gemini_key:
+        preset = PROVIDER_PRESETS["gemini"]
+        return LlmProviderConfig(
+            provider="gemini",
+            protocol=preset["protocol"],
+            label=preset["label"],
+            model=os.getenv("GEMINI_MODEL", preset["default_model"]).strip(),
+            base_url=os.getenv("GEMINI_BASE_URL", preset["default_base_url"]).rstrip("/"),
+            api_key=gemini_key,
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),

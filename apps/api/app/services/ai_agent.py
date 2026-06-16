@@ -454,8 +454,9 @@ def _call_openai(config: LlmProviderConfig, prompt: str, max_tokens: int) -> Pro
         ],
         "temperature": 0.1,
         "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
     }
+    if config.provider != "gemini":
+        payload["response_format"] = {"type": "json_object"}
     request = urllib.request.Request(
         f"{config.base_url}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),

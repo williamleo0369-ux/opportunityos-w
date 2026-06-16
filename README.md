@@ -34,11 +34,11 @@ Current real sources:
 - Alibaba.com Search HTML for supplier listing, MOQ, pricing, review score, and product URL extraction
 - 1688 Search HTML for supplier rows only when `OPPORTUNITY_OS_1688_COOKIE` is configured with a valid session
 - EC21 B2B Market for supplier listing, MOQ, pricing, origin, and contact URL extraction
-- LLM Agent orchestration through GPT/OpenAI, DeepSeek, Claude/Anthropic-compatible, Zhipu GLM, or custom compatible chat APIs when credentials are configured
+- LLM Agent orchestration through GPT/OpenAI, DeepSeek, Google Gemini, Claude/Anthropic-compatible, Zhipu GLM, or custom compatible chat APIs when credentials are configured
 
-Still pending:
+Operational limits:
 
-- Valid 1688 session cookie provisioning/refresh; without it, public search returns anti-bot verification in this runtime
+- 1688 still requires a valid authenticated session cookie; without it, public search returns anti-bot verification in this runtime. Users can save and refresh the encrypted account-level cookie from Settings.
 
 ## Quick Start
 
@@ -105,8 +105,8 @@ Optional real-source credentials:
 
 - `OPPORTUNITY_OS_DATABASE_URL`: optional database connection URL. Defaults to local SQLite; use the Docker Compose PostgreSQL URL above for a shared database.
 - `OPPORTUNITY_OS_1688_COOKIE`: authenticated 1688 browser cookie string. If unset or expired, 1688 is reported as guarded/missing-session and no synthetic 1688 supplier rows are generated.
-- `OPENAI_API_KEY` plus optional `OPENAI_MODEL`/`OPENAI_BASE_URL`, `DEEPSEEK_API_KEY` plus optional `DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL`, `ZHIPU_API_KEY` plus optional `ZHIPU_MODEL`/`ZHIPU_BASE_URL`, or `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` plus optional `ANTHROPIC_MODEL`/`ANTHROPIC_BASE_URL`: enables the LLM agent. Admins can also configure the provider, model, Base URL, and API key from `/admin`; saved keys are encrypted. The default DeepSeek model is `deepseek-v4-flash` with Base URL `https://api.deepseek.com`.
-- `OPPORTUNITY_OS_LLM_PROVIDER`: optional `auto`, `openai`, `deepseek`, `anthropic`, or `zhipu`; defaults to `auto`.
+- `OPENAI_API_KEY` plus optional `OPENAI_MODEL`/`OPENAI_BASE_URL`, `DEEPSEEK_API_KEY` plus optional `DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL`, `GEMINI_API_KEY` plus optional `GEMINI_MODEL`/`GEMINI_BASE_URL`, `ZHIPU_API_KEY` plus optional `ZHIPU_MODEL`/`ZHIPU_BASE_URL`, or `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` plus optional `ANTHROPIC_MODEL`/`ANTHROPIC_BASE_URL`: enables the LLM agent. Admins can also configure the provider, model, Base URL, and API key from `/admin`; saved keys are encrypted. The default DeepSeek model is `deepseek-v4-flash` with Base URL `https://api.deepseek.com`. Gemini uses Google's OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai` by default.
+- `OPPORTUNITY_OS_LLM_PROVIDER`: optional `auto`, `openai`, `deepseek`, `gemini`, `anthropic`, or `zhipu`; defaults to `auto`.
 - `OPPORTUNITY_OS_LLM_TIMEOUT_SECONDS`: optional LLM request timeout, defaults to `25`; timed-out agent calls fall back to evidence-based rule output.
 - `OPPORTUNITY_OS_AGENT_PARALLELISM`: specialist Agent concurrency from `1` to `3`; defaults to `1` to respect rate-limited model gateways.
 - `OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION` / `OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION`: optional model rates used to estimate Agent Run cost. Without them, token usage is recorded but dollar cost remains unset.
@@ -180,6 +180,6 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 ## Next Development Steps
 
-- Add Gemini/local model provider adapters after OpenAI/Anthropic routing.
+- Add local model provider adapters after managed OpenAI-compatible routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
 - Add production worker monitoring, retry/backoff policies, and scheduled source health checks.

@@ -150,6 +150,23 @@ export default function SettingsPage() {
     }
   };
 
+  const refresh1688 = async () => {
+    setCredentialBusy(true);
+    setError("");
+    try {
+      const nextCredential = await api.refresh1688Credential();
+      setCredential1688(nextCredential);
+      await refreshSourceHealth();
+      const nextStatus = await api.getSystemStatus();
+      setStatus(nextStatus);
+      setCredential1688(nextStatus.source_credentials?.["1688"] ?? nextCredential);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "1688 会话刷新失败");
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
   const clear1688 = async () => {
     setCredentialBusy(true);
     try {
@@ -313,6 +330,14 @@ export default function SettingsPage() {
                   className="focus-ring rounded-lg bg-indigo px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo/20 transition hover:opacity-90 disabled:opacity-60"
                 >
                   保存并检测
+                </button>
+                <button
+                  type="button"
+                  onClick={refresh1688}
+                  disabled={credentialBusy || !credential1688?.configured}
+                  className="focus-ring rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-indigo/40 disabled:opacity-60"
+                >
+                  重新检测
                 </button>
                 <button
                   type="button"

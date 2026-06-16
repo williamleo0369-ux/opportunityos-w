@@ -180,7 +180,6 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 ## Next Development Steps
 
-- Add 1688 cookie refresh workflow.
 - Add Gemini/local model provider adapters after OpenAI/Anthropic routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
 - Add production worker monitoring, retry/backoff policies, and scheduled source health checks.

@@ -568,6 +568,11 @@ export const api = {
       body: JSON.stringify({ cookie }),
     });
   },
+  refresh1688Credential() {
+    return request<SourceCredentialStatus>("/api/source-credentials/1688/refresh", {
+      method: "POST",
+    });
+  },
   clear1688Credential() {
     return request<SourceCredentialStatus>("/api/source-credentials/1688", {
       method: "DELETE",

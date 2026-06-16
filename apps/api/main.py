@@ -1127,6 +1127,12 @@ def set_1688_credentials(
     return credential_1688_status(user.id, status, "account")
 
 
+@app.post("/api/source-credentials/1688/refresh")
+def refresh_1688_credentials(user: User = Depends(current_user)) -> dict[str, object]:
+    status, source = account_1688_status(user.id, refresh=True)
+    return credential_1688_status(user.id, status, source)
+
+
 @app.delete("/api/source-credentials/1688")
 def clear_1688_credentials(user: User = Depends(current_user)) -> dict[str, object]:
     clear_1688_cookie(user.id)

@@ -6,6 +6,8 @@ import json
 import os
 import re
 import ssl
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -22,6 +24,7 @@ USER_AGENT = (
 )
 SSL_CONTEXT = ssl._create_unverified_context()
 CNY_TO_USD_ESTIMATE = 0.14
+TRANSIENT_HTTP_CODES = {408, 425, 429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -100,7 +103,7 @@ class SupplySignal:
     raw_data: dict[str, Any]
 
 
-def _fetch(url: str, timeout: int = 12, headers: dict[str, str] | None = None) -> bytes:
+def _fetch(url: str, timeout: int = 12, headers: dict[str, str] | None = None, retries: int = 2) -> bytes:
     request = urllib.request.Request(
         url,
         headers={
@@ -111,11 +114,36 @@ def _fetch(url: str, timeout: int = 12, headers: dict[str, str] | None = None) -
             **(headers or {}),
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT) as response:
-        payload = response.read()
-        if response.headers.get("Content-Encoding") == "gzip":
-            return gzip.decompress(payload)
-        return payload
+    last_error: Exception | None = None
+    for attempt in range(max(0, retries) + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT) as response:
+                payload = response.read()
+                if response.headers.get("Content-Encoding") == "gzip":
+                    return gzip.decompress(payload)
+                return payload
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code not in TRANSIENT_HTTP_CODES or attempt >= retries:
+                raise
+            retry_after = _retry_after_seconds(exc)
+            time.sleep(retry_after if retry_after is not None else min(4.0, 0.7 * (2 ** attempt)))
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt >= retries:
+                raise
+            time.sleep(min(4.0, 0.7 * (2 ** attempt)))
+    if last_error:
+        raise last_error
+    raise RuntimeError("fetch failed")
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> float | None:
+    raw = exc.headers.get("retry-after") if exc.headers else None
+    try:
+        return max(0.5, min(8.0, float(raw))) if raw else None
+    except ValueError:
+        return None
 
 
 def _fetch_json(url: str, timeout: int = 12, headers: dict[str, str] | None = None) -> dict[str, Any] | list[Any]:

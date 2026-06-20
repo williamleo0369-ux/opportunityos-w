@@ -193,16 +193,32 @@ def safe_broker_url() -> str:
     return safe_redis_url(REDIS_URL)
 
 
-def celery_worker_count() -> int:
+def celery_worker_snapshot() -> dict[str, object]:
     if TASK_QUEUE_MODE != "celery":
-        return SEARCH_WORKER_COUNT
+        return {
+            "count": SEARCH_WORKER_COUNT,
+            "workers": [f"local-{index + 1}" for index in range(SEARCH_WORKER_COUNT)],
+            "error": None,
+        }
     try:
         from app.celery_app import celery_app
 
         replies = celery_app.control.inspect(timeout=0.5).ping() or {}
-        return len(replies)
-    except Exception:
-        return 0
+        return {
+            "count": len(replies),
+            "workers": sorted(str(name) for name in replies.keys()),
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "count": 0,
+            "workers": [],
+            "error": str(exc)[:200],
+        }
+
+
+def celery_worker_count() -> int:
+    return int(celery_worker_snapshot()["count"])
 
 
 @app.middleware("http")
@@ -425,7 +441,8 @@ def search_queue_status(user_id: str | None = None) -> dict[str, object]:
             for task in stored_tasks
             if task.status not in TERMINAL_SEARCH_STATUSES
         ]
-        observed_worker_count = celery_worker_count()
+        worker_snapshot = celery_worker_snapshot()
+        observed_worker_count = int(worker_snapshot["count"])
         recently_running = any(
             task.status != "pending"
             and (utc_now() - task.updated_at).total_seconds() < 300
@@ -433,20 +450,37 @@ def search_queue_status(user_id: str | None = None) -> dict[str, object]:
             if task.status not in TERMINAL_SEARCH_STATUSES
         )
         worker_count = max(observed_worker_count, 1 if recently_running else 0)
+        stale_count = sum(
+            1
+            for task in stored_tasks
+            if task.status not in TERMINAL_SEARCH_STATUSES
+            and worker_count == 0
+            and (utc_now() - task.updated_at).total_seconds() >= 300
+        )
+        queued_count = sum(1 for item in active_rows if item["state"] == "queued")
+        running_count = sum(1 for item in active_rows if item["state"] == "running")
+        health = "healthy"
+        if worker_count == 0 and active_rows:
+            health = "offline"
+        elif stale_count > 0 or worker_snapshot.get("error"):
+            health = "degraded"
         return {
             "mode": "celery",
             "broker_url": safe_broker_url(),
             "worker_count": worker_count,
-            "active_count": len(active_rows),
-            "queued_count": sum(1 for item in active_rows if item["state"] == "queued"),
-            "running_count": sum(1 for item in active_rows if item["state"] == "running"),
-            "stale_non_terminal_count": sum(
-                1
-                for task in stored_tasks
-                if task.status not in TERMINAL_SEARCH_STATUSES
-                and worker_count == 0
-                and (utc_now() - task.updated_at).total_seconds() >= 300
+            "worker_names": worker_snapshot["workers"],
+            "health": health,
+            "health_reason": (
+                "没有在线 Celery worker，排队任务不会继续执行。"
+                if health == "offline"
+                else str(worker_snapshot.get("error") or "")
+                if health == "degraded"
+                else "Celery worker 在线。"
             ),
+            "active_count": len(active_rows),
+            "queued_count": queued_count,
+            "running_count": running_count,
+            "stale_non_terminal_count": stale_count,
             "active_tasks": active_rows,
         }
 
@@ -475,6 +509,9 @@ def search_queue_status(user_id: str | None = None) -> dict[str, object]:
         "mode": "local",
         "broker_url": None,
         "worker_count": SEARCH_WORKER_COUNT,
+        "worker_names": [f"local-{index + 1}" for index in range(SEARCH_WORKER_COUNT)],
+        "health": "degraded" if stale_rows else "healthy",
+        "health_reason": "本地后台池在线。" if not stale_rows else "发现未完成但未被当前进程跟踪的任务，可重试。",
         "active_count": len(active_rows),
         "queued_count": sum(1 for item in active_rows if item["state"] == "queued"),
         "running_count": sum(1 for item in active_rows if item["state"] == "running"),

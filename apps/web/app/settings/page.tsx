@@ -37,6 +37,19 @@ const sourceCredentialTone = (source?: SourceCredentialStatus | null) => {
   return "bg-field text-muted";
 };
 
+const queueHealthLabel = (health?: string) => {
+  if (health === "healthy") return "在线";
+  if (health === "offline") return "离线";
+  if (health === "degraded") return "需关注";
+  return "未知";
+};
+
+const queueHealthClass = (health?: string) => {
+  if (health === "healthy") return "bg-indigo/10 text-indigo";
+  if (health === "offline") return "bg-clay/10 text-clay";
+  return "bg-amber-50 text-amber-700";
+};
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -471,8 +484,21 @@ export default function SettingsPage() {
                       <p className="mt-1 text-xs text-muted">
                         {visibleSearchQueue.mode === "celery" ? "Celery / Redis" : "本地进程"} · Workers {visibleSearchQueue.worker_count} · 运行 {visibleSearchQueue.running_count} · 排队 {visibleSearchQueue.queued_count}
                       </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${queueHealthClass(visibleSearchQueue.health)}`}>
+                          {queueHealthLabel(visibleSearchQueue.health)}
+                        </span>
+                        {visibleSearchQueue.health_reason ? (
+                          <span className="text-xs text-muted">{visibleSearchQueue.health_reason}</span>
+                        ) : null}
+                      </div>
                       {visibleSearchQueue.broker_url ? (
                         <p className="mt-1 font-mono text-[11px] text-muted">{visibleSearchQueue.broker_url}</p>
+                      ) : null}
+                      {visibleSearchQueue.worker_names?.length ? (
+                        <p className="mt-1 truncate font-mono text-[11px] text-muted">
+                          {visibleSearchQueue.worker_names.join(" / ")}
+                        </p>
                       ) : null}
                     </div>
                     <button

@@ -300,6 +300,9 @@ export type SearchQueueStatus = {
   mode: "local" | "celery";
   broker_url?: string | null;
   worker_count: number;
+  worker_names?: string[];
+  health?: "healthy" | "degraded" | "offline" | string;
+  health_reason?: string | null;
   active_count: number;
   queued_count: number;
   running_count: number;

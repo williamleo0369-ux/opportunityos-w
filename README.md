@@ -182,4 +182,4 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 - Add local model provider adapters after managed OpenAI-compatible routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
-- Add production worker monitoring, retry/backoff policies, and scheduled source health checks.
+- Add automatic retry/backoff policies for transient source and provider failures.

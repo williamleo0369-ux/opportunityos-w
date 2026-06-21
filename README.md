@@ -110,6 +110,7 @@ Optional real-source credentials:
 - `OPPORTUNITY_OS_LLM_TIMEOUT_SECONDS`: optional LLM request timeout, defaults to `25`; timed-out agent calls fall back to evidence-based rule output.
 - `OPPORTUNITY_OS_AGENT_PARALLELISM`: specialist Agent concurrency from `1` to `3`; defaults to `1` to respect rate-limited model gateways.
 - `OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION` / `OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION`: optional model rates used to estimate Agent Run cost. Without them, token usage is recorded but dollar cost remains unset.
+- `OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD`: optional per-run AI budget. Requires input/output token prices; when the estimated next Agent stage would exceed the budget, OpportunityOS skips that stage and falls back to evidence/rule analysis instead of breaking the report flow.
 - `OPPORTUNITY_OS_SOURCE_HEALTH_INTERVAL_SECONDS`: optional interval, minimum 60 seconds. When set, the API process starts scheduled source-health checks on boot and persists snapshots to the local store.
 - `OPPORTUNITY_OS_TASK_QUEUE`: `local` by default, or `celery` for the Redis-backed distributed queue.
 - `REDIS_URL`: Celery broker and result-backend URL; defaults to `redis://127.0.0.1:6379/0`. Railway-style `REDIS_PRIVATE_URL`, `REDIS_PUBLIC_URL`, and `RAILWAY_REDIS_URL` are also recognized.
@@ -182,4 +183,4 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 - Add local model provider adapters after managed OpenAI-compatible routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
-- Add provider-level retry budget controls and per-user cost guardrails.
+- Add per-user cost guardrails and usage policy presets.

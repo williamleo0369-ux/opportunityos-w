@@ -29,6 +29,7 @@ class LlmProviderConfig:
     source: str
     input_usd_per_million: float | None = None
     output_usd_per_million: float | None = None
+    max_run_cost_usd: float | None = None
 
 
 class SystemSettingDecryptionError(RuntimeError):
@@ -109,6 +110,7 @@ def _environment_config() -> LlmProviderConfig | None:
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+            max_run_cost_usd=_optional_float("OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD"),
         )
     if requested in {"deepseek", "auto"} and deepseek_key:
         preset = PROVIDER_PRESETS["deepseek"]
@@ -122,6 +124,7 @@ def _environment_config() -> LlmProviderConfig | None:
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+            max_run_cost_usd=_optional_float("OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD"),
         )
     if requested in {"gemini", "google", "auto"} and gemini_key:
         preset = PROVIDER_PRESETS["gemini"]
@@ -135,6 +138,7 @@ def _environment_config() -> LlmProviderConfig | None:
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+            max_run_cost_usd=_optional_float("OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD"),
         )
     if requested in {"anthropic", "auto"} and anthropic_key:
         preset = PROVIDER_PRESETS["anthropic"]
@@ -154,6 +158,7 @@ def _environment_config() -> LlmProviderConfig | None:
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+            max_run_cost_usd=_optional_float("OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD"),
         )
     if requested in {"zhipu", "glm", "auto"} and zhipu_key:
         preset = PROVIDER_PRESETS["zhipu"]
@@ -167,6 +172,7 @@ def _environment_config() -> LlmProviderConfig | None:
             source="environment",
             input_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_INPUT_USD_PER_MILLION"),
             output_usd_per_million=_optional_float("OPPORTUNITY_OS_LLM_OUTPUT_USD_PER_MILLION"),
+            max_run_cost_usd=_optional_float("OPPORTUNITY_OS_LLM_MAX_RUN_COST_USD"),
         )
     return None
 
@@ -204,6 +210,7 @@ def resolve_llm_config() -> LlmProviderConfig | None:
                 source="database",
                 input_usd_per_million=_payload_float(payload.get("input_usd_per_million")),
                 output_usd_per_million=_payload_float(payload.get("output_usd_per_million")),
+                max_run_cost_usd=_payload_float(payload.get("max_run_cost_usd")),
             )
         environment = _environment_config()
         if environment:
@@ -226,6 +233,11 @@ def resolve_llm_config() -> LlmProviderConfig | None:
                     _payload_float(payload.get("output_usd_per_million"))
                     if payload.get("output_usd_per_million") is not None
                     else environment.output_usd_per_million
+                ),
+                max_run_cost_usd=(
+                    _payload_float(payload.get("max_run_cost_usd"))
+                    if payload.get("max_run_cost_usd") is not None
+                    else environment.max_run_cost_usd
                 ),
             )
     return _environment_config()
@@ -254,6 +266,7 @@ def llm_settings_status() -> dict[str, Any]:
         "api_key_masked": _mask_key(config.api_key) if config else None,
         "input_usd_per_million": config.input_usd_per_million if config else payload.get("input_usd_per_million"),
         "output_usd_per_million": config.output_usd_per_million if config else payload.get("output_usd_per_million"),
+        "max_run_cost_usd": config.max_run_cost_usd if config else payload.get("max_run_cost_usd"),
         "updated_at": record.get("updated_at") if record else None,
         "available_providers": [
             {"value": key, **value}

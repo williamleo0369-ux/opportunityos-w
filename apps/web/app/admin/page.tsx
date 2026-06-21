@@ -29,6 +29,7 @@ type LlmForm = {
   api_key: string;
   input_usd_per_million: string;
   output_usd_per_million: string;
+  max_run_cost_usd: string;
 };
 
 const fallbackProviders = [
@@ -91,6 +92,7 @@ const emptyLlmForm: LlmForm = {
   api_key: "",
   input_usd_per_million: "",
   output_usd_per_million: "",
+  max_run_cost_usd: "",
 };
 
 const formatDate = (value?: string | null) =>
@@ -142,6 +144,10 @@ export default function AdminPage() {
           nextLlm.output_usd_per_million == null
             ? ""
             : String(nextLlm.output_usd_per_million),
+        max_run_cost_usd:
+          nextLlm.max_run_cost_usd == null
+            ? ""
+            : String(nextLlm.max_run_cost_usd),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "管理数据读取失败");
@@ -217,6 +223,9 @@ export default function AdminPage() {
           : null,
         output_usd_per_million: llmForm.output_usd_per_million
           ? Number(llmForm.output_usd_per_million)
+          : null,
+        max_run_cost_usd: llmForm.max_run_cost_usd
+          ? Number(llmForm.max_run_cost_usd)
           : null,
       });
       setLlm(next);
@@ -567,6 +576,28 @@ export default function AdminPage() {
               }
               className="focus-ring mt-2 w-full rounded-lg border border-line bg-white px-3 py-3 text-ink"
             />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-semibold text-ink">
+              单次 Agent 预算 USD
+            </span>
+            <input
+              type="number"
+              min={0}
+              step="0.001"
+              value={llmForm.max_run_cost_usd}
+              onChange={(event) =>
+                setLlmForm((current) => ({
+                  ...current,
+                  max_run_cost_usd: event.target.value,
+                }))
+              }
+              placeholder="留空不限制；超预算时自动使用规则降级"
+              className="focus-ring mt-2 w-full rounded-lg border border-line bg-white px-3 py-3 text-ink placeholder:text-muted"
+            />
+            <p className="mt-2 text-xs leading-5 text-muted">
+              需要同时填写输入/输出单价。预算不足时会跳过后续 AI 阶段，报告仍基于真实证据生成。
+            </p>
           </label>
         </div>
 

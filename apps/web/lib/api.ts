@@ -389,6 +389,7 @@ export type AdminLlmSettings = {
   api_key_masked?: string | null;
   input_usd_per_million?: number | null;
   output_usd_per_million?: number | null;
+  max_run_cost_usd?: number | null;
   updated_at?: string | null;
   available_providers?: Array<{
     value: string;
@@ -606,6 +607,7 @@ export const api = {
     api_key?: string;
     input_usd_per_million?: number | null;
     output_usd_per_million?: number | null;
+    max_run_cost_usd?: number | null;
   }) {
     return request<AdminLlmSettings>("/api/admin/settings/llm", {
       method: "PUT",

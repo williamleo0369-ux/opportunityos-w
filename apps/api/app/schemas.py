@@ -342,3 +342,4 @@ class AdminLlmSettingsRequest(BaseModel):
     api_key: str | None = Field(default=None, min_length=8, max_length=10000)
     input_usd_per_million: float | None = Field(default=None, ge=0)
     output_usd_per_million: float | None = Field(default=None, ge=0)
+    max_run_cost_usd: float | None = Field(default=None, ge=0)

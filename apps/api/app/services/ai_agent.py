@@ -200,34 +200,47 @@ def run_opportunity_analysis(context: dict[str, Any]) -> AgentResult:
             {"competitor_analysis", "pain_point_analysis", "supply_chain_analysis"},
         ),
     ]
-    with ThreadPoolExecutor(max_workers=agent_parallelism()) as executor:
-        futures = {
-            executor.submit(
-                _run_stage,
-                config,
-                name,
-                label,
-                prompt,
-                required,
-                850,
-            ): name
-            for name, label, prompt, required in stage_specs
-        }
-        for future in as_completed(futures):
-            result.steps.append(future.result())
+    if config.max_run_cost_usd is not None:
+        for name, label, prompt, required in stage_specs:
+            max_tokens = 850
+            if _would_exceed_budget(result, config, prompt, max_tokens):
+                result.steps.append(_budget_skipped_step(name, label, config))
+                continue
+            result.steps.append(_run_stage(config, name, label, prompt, required, max_tokens))
+    else:
+        with ThreadPoolExecutor(max_workers=agent_parallelism()) as executor:
+            futures = {
+                executor.submit(
+                    _run_stage,
+                    config,
+                    name,
+                    label,
+                    prompt,
+                    required,
+                    850,
+                ): name
+                for name, label, prompt, required in stage_specs
+            }
+            for future in as_completed(futures):
+                result.steps.append(future.result())
 
     result.steps.sort(key=lambda step: [item[0] for item in stage_specs].index(step.name))
     _apply_specialist_outputs(result)
 
     completed_specialists = sum(1 for step in result.steps if step.status == "completed")
     if completed_specialists:
-        innovation_step = _run_stage(
-            config,
-            "innovation",
-            "创新方向 Agent",
-            _innovation_prompt(context, result),
-            {"innovation_analysis", "ideas"},
-            1200,
+        innovation_prompt = _innovation_prompt(context, result)
+        innovation_step = (
+            _budget_skipped_step("innovation", "创新方向 Agent", config)
+            if _would_exceed_budget(result, config, innovation_prompt, 1200)
+            else _run_stage(
+                config,
+                "innovation",
+                "创新方向 Agent",
+                innovation_prompt,
+                {"innovation_analysis", "ideas"},
+                1200,
+            )
         )
         result.steps.append(innovation_step)
         if innovation_step.status == "completed":
@@ -237,11 +250,12 @@ def run_opportunity_analysis(context: dict[str, Any]) -> AgentResult:
         result.steps.append(_skipped_step("innovation", "创新方向 Agent", "No specialist Agent completed."))
 
     _finish_result(result, started)
+    budget_limited = any(_is_budget_skip(step) for step in result.steps)
     result.status = (
         "analysis_completed"
         if completed_specialists == len(stage_specs) and result.ideas
         else "analysis_completed_with_gaps"
-        if completed_specialists
+        if completed_specialists or budget_limited
         else "provider_error"
     )
     errors = [step.error for step in result.steps if step.error]
@@ -261,13 +275,19 @@ def finalize_opportunity_agent(
             _finish_result(result, time.perf_counter(), accumulate=True)
         return result
     started = time.perf_counter()
-    report_step = _run_stage(
-        result.provider_config or resolve_llm_config(),
-        "scoring_report",
-        "评分与报告 Agent",
-        _report_prompt(context, result, scores, ideas),
-        {"executive_summary", "final_recommendation", "score_reasoning", "risk_notice"},
-        1100,
+    config = result.provider_config or resolve_llm_config()
+    report_prompt = _report_prompt(context, result, scores, ideas)
+    report_step = (
+        _budget_skipped_step("scoring_report", "评分与报告 Agent", config)
+        if _would_exceed_budget(result, config, report_prompt, 1100)
+        else _run_stage(
+            config,
+            "scoring_report",
+            "评分与报告 Agent",
+            report_prompt,
+            {"executive_summary", "final_recommendation", "score_reasoning", "risk_notice"},
+            1100,
+        )
     )
     result.steps.append(report_step)
     if report_step.status == "completed":
@@ -319,6 +339,57 @@ def _finish_result(result: AgentResult, started: float, *, accumulate: bool = Fa
         result.output_tokens,
         result.provider_config,
     )
+
+
+def _would_exceed_budget(
+    result: AgentResult,
+    config: LlmProviderConfig | None,
+    prompt: str,
+    max_tokens: int,
+) -> bool:
+    if config is None or config.max_run_cost_usd is None:
+        return False
+    if config.input_usd_per_million is None or config.output_usd_per_million is None:
+        return False
+    spent = _estimated_cost(
+        sum(step.input_tokens for step in result.steps),
+        sum(step.output_tokens for step in result.steps),
+        config,
+    ) or 0.0
+    next_cost = _estimated_stage_cost(config, prompt, max_tokens)
+    return spent + next_cost > config.max_run_cost_usd
+
+
+def _estimated_stage_cost(config: LlmProviderConfig, prompt: str, max_tokens: int) -> float:
+    if config.input_usd_per_million is None or config.output_usd_per_million is None:
+        return 0.0
+    input_tokens = _rough_token_count(prompt) + _rough_token_count(_system_instruction())
+    return round(
+        (
+            input_tokens * config.input_usd_per_million
+            + max_tokens * config.output_usd_per_million
+        )
+        / 1_000_000,
+        6,
+    )
+
+
+def _rough_token_count(text: str) -> int:
+    return max(1, int(len(text) / 3.5))
+
+
+def _budget_skipped_step(name: str, label: str, config: LlmProviderConfig | None) -> AgentStep:
+    budget = config.max_run_cost_usd if config else None
+    reason = (
+        f"AI 单次预算 ${budget:.4f} 不足，已跳过该阶段并使用规则降级。"
+        if isinstance(budget, (int, float))
+        else "AI 单次预算不足，已跳过该阶段并使用规则降级。"
+    )
+    return _skipped_step(name, label, reason)
+
+
+def _is_budget_skip(step: AgentStep) -> bool:
+    return step.status == "skipped" and "AI 单次预算" in (step.error or "")
 
 
 def _run_stage(

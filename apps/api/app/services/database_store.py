@@ -554,12 +554,13 @@ def _claim_legacy_workspace(connection: Any, user_id: str) -> None:
         )
 
 
-def user_usage(user_id: str) -> dict[str, int]:
+def user_usage(user_id: str) -> dict[str, int | float]:
     initialize_database()
     now = datetime.now(timezone.utc)
     searches_today = 0
     reports_this_month = 0
     active_report_reservations = 0
+    ai_cost_this_month_usd = 0.0
     with connect() as connection:
         task_rows = connection.execute("SELECT payload FROM search_tasks").fetchall()
         report_rows = connection.execute("SELECT payload FROM reports").fetchall()
@@ -584,9 +585,16 @@ def user_usage(user_id: str) -> dict[str, int]:
             and created_at.month == now.month
         ):
             reports_this_month += 1
+            agent_run = payload.get("agent_run")
+            if isinstance(agent_run, dict):
+                try:
+                    ai_cost_this_month_usd += max(0.0, float(agent_run.get("estimated_cost_usd") or 0))
+                except (TypeError, ValueError):
+                    pass
     return {
         "searches_today": searches_today,
         "reports_this_month": reports_this_month + active_report_reservations,
+        "ai_cost_this_month_usd": round(ai_cost_this_month_usd, 6),
     }
 
 

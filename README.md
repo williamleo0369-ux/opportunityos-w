@@ -117,6 +117,7 @@ Optional real-source credentials:
 - `OPPORTUNITY_OS_SEARCH_WORKERS`: local worker count and recommended Celery concurrency; defaults to `2`.
 - `OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY`: search allowance assigned to new accounts; defaults to `20`.
 - `OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY`: report allowance assigned to new accounts; defaults to `100`.
+- `OPPORTUNITY_OS_DEFAULT_AI_COST_QUOTA_MONTHLY`: monthly AI cost budget assigned to new accounts, defaults to `5` USD. Admins can override or clear it per user from `/admin`; when exhausted, real-source collection continues and AI Agent stages are skipped.
 - `OPPORTUNITY_OS_ADMIN_EMAILS`: comma-separated emails that receive the `admin` role when they register. Admins can manage users and AI API settings from `/admin`.
 - `OPPORTUNITY_OS_SESSION_TTL_DAYS`: signed session lifetime; defaults to `30`.
 - `OPPORTUNITY_OS_AUTH_SECRET`: production signing secret. Local development creates a persistent secret at `~/.opportunity-os/auth-secret`.
@@ -183,4 +184,4 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 - Add local model provider adapters after managed OpenAI-compatible routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
-- Add per-user cost guardrails and usage policy presets.
+- Add reusable usage policy presets for starter/pro/admin plans.

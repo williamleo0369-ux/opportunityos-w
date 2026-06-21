@@ -138,8 +138,25 @@ source_health_scheduler = SourceHealthScheduler()
 TERMINAL_SEARCH_STATUSES = {"completed", "failed", "cancelled"}
 active_search_tasks: dict[str, dict[str, str]] = {}
 SESSION_COOKIE = "opportunity_os_session"
-DEFAULT_SEARCH_QUOTA = int(os.getenv("OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY", "20"))
-DEFAULT_REPORT_QUOTA = int(os.getenv("OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY", "100"))
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+DEFAULT_SEARCH_QUOTA = _env_int("OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY", 20)
+DEFAULT_REPORT_QUOTA = _env_int("OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY", 100)
+DEFAULT_AI_COST_QUOTA = _env_float("OPPORTUNITY_OS_DEFAULT_AI_COST_QUOTA_MONTHLY", 5.0)
 BOOTSTRAP_ADMIN_USERNAME = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_USERNAME", "admin").strip() or "admin"
 BOOTSTRAP_ADMIN_PASSWORD = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_PASSWORD", "admin1212").strip() or "admin1212"
 BOOTSTRAP_ADMIN_EMAIL = (
@@ -260,6 +277,7 @@ def utc_now() -> datetime:
 
 
 def public_user(payload: dict[str, object]) -> User:
+    payload.setdefault("ai_cost_quota_monthly", DEFAULT_AI_COST_QUOTA)
     return User.model_validate(payload)
 
 
@@ -297,6 +315,7 @@ def ensure_bootstrap_admin() -> None:
             "is_active": True,
             "search_quota_daily": DEFAULT_SEARCH_QUOTA,
             "report_quota_monthly": DEFAULT_REPORT_QUOTA,
+            "ai_cost_quota_monthly": payload.get("ai_cost_quota_monthly", DEFAULT_AI_COST_QUOTA),
             "updated_at": now,
         }
     )
@@ -305,11 +324,20 @@ def ensure_bootstrap_admin() -> None:
 
 def usage_for_user(user: User) -> UserUsage:
     usage = user_usage(user.id)
+    searches_today = int(usage.get("searches_today") or 0)
+    reports_this_month = int(usage.get("reports_this_month") or 0)
+    ai_cost_this_month = float(usage.get("ai_cost_this_month_usd") or 0)
     return UserUsage(
-        searches_today=usage["searches_today"],
-        reports_this_month=usage["reports_this_month"],
-        search_remaining=max(0, user.search_quota_daily - usage["searches_today"]),
-        report_remaining=max(0, user.report_quota_monthly - usage["reports_this_month"]),
+        searches_today=searches_today,
+        reports_this_month=reports_this_month,
+        search_remaining=max(0, user.search_quota_daily - searches_today),
+        report_remaining=max(0, user.report_quota_monthly - reports_this_month),
+        ai_cost_this_month_usd=ai_cost_this_month,
+        ai_cost_remaining_usd=(
+            max(0.0, round(user.ai_cost_quota_monthly - ai_cost_this_month, 6))
+            if user.ai_cost_quota_monthly is not None
+            else None
+        ),
     )
 
 
@@ -843,6 +871,7 @@ def register(request: RegisterRequest, response: Response) -> AuthResponse:
         "is_active": True,
         "search_quota_daily": DEFAULT_SEARCH_QUOTA,
         "report_quota_monthly": DEFAULT_REPORT_QUOTA,
+        "ai_cost_quota_monthly": DEFAULT_AI_COST_QUOTA,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
@@ -913,6 +942,8 @@ def admin_update_user(
     if payload is None:
         raise HTTPException(status_code=404, detail="用户不存在")
     changes = request.model_dump(exclude_none=True)
+    if "ai_cost_quota_monthly" in request.model_fields_set and request.ai_cost_quota_monthly is None:
+        changes["ai_cost_quota_monthly"] = None
     if user_id == admin.id and (
         changes.get("role") == "user" or changes.get("is_active") is False
     ):

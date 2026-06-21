@@ -17,8 +17,9 @@ from app.schemas import (
     SupplyChainItem,
     TrendData,
 )
-from app.services.ai_agent import AgentResult, finalize_opportunity_agent, run_opportunity_analysis
+from app.services.ai_agent import AgentResult, finalize_opportunity_agent, run_opportunity_analysis, skipped_agent_result
 from app.services.data_quality import build_data_quality, data_quality_markdown
+from app.services.database_store import load_user_payload, user_usage
 from app.services.real_sources import (
     collect_1688_supply_chain,
     collect_amazon_competitors,
@@ -35,6 +36,28 @@ from app.services.source_credentials import CredentialDecryptionError, load_1688
 
 def now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _payload_float(value: object) -> float | None:
+    try:
+        return max(0.0, float(value)) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _ai_agent_budget_status(user_id: str) -> tuple[bool, str | None]:
+    payload = load_user_payload(user_id)
+    quota = _payload_float(payload.get("ai_cost_quota_monthly")) if payload else None
+    if quota is None:
+        return True, None
+    usage = user_usage(user_id)
+    used = max(0.0, float(usage.get("ai_cost_this_month_usd") or 0))
+    if used >= quota:
+        return (
+            False,
+            f"本月 AI 成本额度已用完（已用 ${used:.4f} / 额度 ${quota:.4f}）。本次报告已跳过 AI Agent，改用真实证据与规则分析。",
+        )
+    return True, None
 
 
 def expand_keywords(keyword: str) -> list[str]:
@@ -810,27 +833,33 @@ def run_pipeline(
     supply_chain = generate_supply_chain(opportunity_id, related[0], user_id=user_id)
     emit("analyzing", 76)
     agent_context = build_agent_context(related[0], trend, patents, competitors, pain_points, supply_chain)
-    agent_result = run_opportunity_analysis(agent_context)
+    ai_agent_allowed, ai_agent_skip_reason = _ai_agent_budget_status(user_id)
+    agent_result = (
+        run_opportunity_analysis(agent_context)
+        if ai_agent_allowed
+        else skipped_agent_result(ai_agent_skip_reason or "AI Agent 已被成本护栏跳过。")
+    )
     ideas = generate_innovation_ideas(opportunity_id, related[0], pain_points, patents, competitors, supply_chain, agent_result)
     emit("scoring", 86)
     scores = score_opportunity(trend, patents, competitors, supply_chain, ideas)
-    agent_result = finalize_opportunity_agent(
-        agent_context,
-        agent_result,
-        scores,
-        [
-            {
-                "title": item.idea_title,
-                "description": item.idea_description,
-                "market_value_score": item.market_value_score,
-                "difficulty_score": item.difficulty_score,
-                "cost_impact": item.cost_impact,
-                "differentiation_score": item.differentiation_score,
-                "target_user": item.target_user,
-            }
-            for item in ideas
-        ],
-    )
+    if ai_agent_allowed:
+        agent_result = finalize_opportunity_agent(
+            agent_context,
+            agent_result,
+            scores,
+            [
+                {
+                    "title": item.idea_title,
+                    "description": item.idea_description,
+                    "market_value_score": item.market_value_score,
+                    "difficulty_score": item.difficulty_score,
+                    "cost_impact": item.cost_impact,
+                    "differentiation_score": item.differentiation_score,
+                    "target_user": item.target_user,
+                }
+                for item in ideas
+            ],
+        )
     competitor_prices = [item.price for item in competitors if item.price > 0]
     price_min = min(competitor_prices) if competitor_prices else 0
     price_max = max(competitor_prices) if competitor_prices else 0

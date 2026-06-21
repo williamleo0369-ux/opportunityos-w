@@ -308,6 +308,23 @@ def run_opportunity_agent(context: dict[str, Any]) -> AgentResult:
     return finalize_opportunity_agent(context, result, {}, [])
 
 
+def skipped_agent_result(reason: str) -> AgentResult:
+    started_at = utc_now_iso()
+    started = time.perf_counter()
+    result = AgentResult(
+        run_id=str(uuid4()),
+        mode="budget_guard",
+        provider=None,
+        model=None,
+        status="completed_with_gaps",
+        error=reason,
+        started_at=started_at,
+    )
+    result.steps.append(_skipped_step("ai_budget_guard", "AI 成本护栏", reason))
+    _finish_result(result, started)
+    return result
+
+
 def _apply_specialist_outputs(result: AgentResult) -> None:
     for step in result.steps:
         if step.status != "completed":

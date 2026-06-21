@@ -12,6 +12,7 @@ export type User = {
   is_active: boolean;
   search_quota_daily: number;
   report_quota_monthly: number;
+  ai_cost_quota_monthly?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -21,6 +22,8 @@ export type UserUsage = {
   reports_this_month: number;
   search_remaining: number;
   report_remaining: number;
+  ai_cost_this_month_usd: number;
+  ai_cost_remaining_usd?: number | null;
 };
 
 export type AuthResponse = {
@@ -587,7 +590,7 @@ export const api = {
   },
   updateAdminUser(
     id: string,
-    payload: Partial<Pick<User, "username" | "plan" | "role" | "is_active" | "search_quota_daily" | "report_quota_monthly">> & {
+    payload: Partial<Pick<User, "username" | "plan" | "role" | "is_active" | "search_quota_daily" | "report_quota_monthly" | "ai_cost_quota_monthly">> & {
       password?: string;
     },
   ) {

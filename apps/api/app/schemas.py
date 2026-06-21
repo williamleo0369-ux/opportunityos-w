@@ -40,6 +40,7 @@ class User(BaseModel):
     is_active: bool = True
     search_quota_daily: int
     report_quota_monthly: int
+    ai_cost_quota_monthly: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -49,6 +50,8 @@ class UserUsage(BaseModel):
     reports_this_month: int
     search_remaining: int
     report_remaining: int
+    ai_cost_this_month_usd: float = 0.0
+    ai_cost_remaining_usd: float | None = None
 
 
 class AuthResponse(BaseModel):
@@ -324,6 +327,7 @@ class AdminUserUpdate(BaseModel):
     is_active: bool | None = None
     search_quota_daily: int | None = Field(default=None, ge=0, le=100000)
     report_quota_monthly: int | None = Field(default=None, ge=0, le=100000)
+    ai_cost_quota_monthly: float | None = Field(default=None, ge=0, le=100000)
 
 
 class AdminUserRecord(BaseModel):

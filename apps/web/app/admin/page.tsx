@@ -189,6 +189,10 @@ export default function AdminPage() {
         is_active: record.user.is_active,
         search_quota_daily: Number(record.user.search_quota_daily),
         report_quota_monthly: Number(record.user.report_quota_monthly),
+        ai_cost_quota_monthly:
+          record.user.ai_cost_quota_monthly == null
+            ? null
+            : Number(record.user.ai_cost_quota_monthly),
         password: passwordDrafts[record.user.id]?.trim() || undefined,
       });
       setUsers((current) =>
@@ -308,7 +312,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-line text-xs text-muted">
                   <th className="px-3 py-3 font-semibold">用户</th>
@@ -317,6 +321,7 @@ export default function AdminPage() {
                   <th className="px-3 py-3 font-semibold">重置密码</th>
                   <th className="px-3 py-3 font-semibold">每日搜索</th>
                   <th className="px-3 py-3 font-semibold">每月报告</th>
+                  <th className="px-3 py-3 font-semibold">AI 月预算</th>
                   <th className="px-3 py-3 font-semibold">实际使用</th>
                   <th className="px-3 py-3 font-semibold">状态</th>
                   <th className="px-3 py-3 font-semibold">最近活动</th>
@@ -403,9 +408,32 @@ export default function AdminPage() {
                         className="focus-ring w-24 rounded-md border border-line bg-white px-2.5 py-2 text-ink"
                       />
                     </td>
+                    <td className="px-3 py-4">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={record.user.ai_cost_quota_monthly ?? ""}
+                        onChange={(event) =>
+                          updateLocalUser(record.user.id, {
+                            ai_cost_quota_monthly: event.target.value
+                              ? Number(event.target.value)
+                              : null,
+                          })
+                        }
+                        placeholder="不限"
+                        className="focus-ring w-24 rounded-md border border-line bg-white px-2.5 py-2 text-ink placeholder:text-muted"
+                      />
+                    </td>
                     <td className="px-3 py-4 text-muted">
                       <p>今日 {record.usage.searches_today}</p>
                       <p className="mt-1">本月 {record.usage.reports_this_month}</p>
+                      <p className="mt-1">
+                        AI ${record.usage.ai_cost_this_month_usd.toFixed(4)}
+                        {record.usage.ai_cost_remaining_usd == null
+                          ? " · 不限"
+                          : ` · 剩余 $${record.usage.ai_cost_remaining_usd.toFixed(4)}`}
+                      </p>
                       <p className="mt-1 text-xs">
                         {record.task_count} 任务 · {record.report_count} 报告
                       </p>

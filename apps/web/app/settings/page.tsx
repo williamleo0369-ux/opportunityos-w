@@ -253,7 +253,7 @@ export default function SettingsPage() {
       </div>
 
       {status?.account ? (
-        <div className="mb-6 grid gap-4 rounded-2xl border border-line/80 bg-white p-5 shadow-panel md:grid-cols-[1fr_auto_auto] md:items-center">
+        <div className="mb-6 grid gap-4 rounded-2xl border border-line/80 bg-white p-5 shadow-panel md:grid-cols-[1fr_auto_auto_auto] md:items-center">
           <div className="flex items-center gap-4">
             <span className="grid size-11 place-items-center rounded-full bg-indigo/10 text-indigo">
               <UserRound size={19} />
@@ -277,6 +277,17 @@ export default function SettingsPage() {
             <p className="mt-1 font-semibold text-ink">
               {status.account.usage.reports_this_month} / {status.account.user.report_quota_monthly}
               <span className="ml-2 text-indigo">剩余 {status.account.usage.report_remaining}</span>
+            </p>
+          </div>
+          <div className="rounded-xl bg-field px-4 py-3">
+            <p className="text-xs text-muted">本月 AI 成本</p>
+            <p className="mt-1 font-semibold text-ink">
+              ${status.account.usage.ai_cost_this_month_usd.toFixed(4)}
+              <span className="ml-2 text-indigo">
+                {status.account.usage.ai_cost_remaining_usd == null
+                  ? "不限"
+                  : `剩余 $${status.account.usage.ai_cost_remaining_usd.toFixed(4)}`}
+              </span>
             </p>
           </div>
         </div>

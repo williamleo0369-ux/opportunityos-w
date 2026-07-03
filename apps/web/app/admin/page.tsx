@@ -19,6 +19,7 @@ import {
   type AdminLlmSettings,
   type AdminLlmTestResult,
   type AdminUserRecord,
+  type UsagePolicyPreset,
 } from "@/lib/api";
 
 type LlmForm = {
@@ -95,6 +96,30 @@ const emptyLlmForm: LlmForm = {
   max_run_cost_usd: "",
 };
 
+const fallbackUsagePolicies: UsagePolicyPreset[] = [
+  {
+    plan: "starter",
+    label: "Starter",
+    search_quota_daily: 20,
+    report_quota_monthly: 100,
+    ai_cost_quota_monthly: 5,
+  },
+  {
+    plan: "pro",
+    label: "Pro",
+    search_quota_daily: 100,
+    report_quota_monthly: 500,
+    ai_cost_quota_monthly: 25,
+  },
+  {
+    plan: "admin",
+    label: "Admin",
+    search_quota_daily: 100000,
+    report_quota_monthly: 100000,
+    ai_cost_quota_monthly: null,
+  },
+];
+
 const formatDate = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat("zh-CN", {
@@ -108,6 +133,7 @@ const formatDate = (value?: string | null) =>
 export default function AdminPage() {
   const { user, refresh: refreshAuth } = useAuth();
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
+  const [usagePolicies, setUsagePolicies] = useState<UsagePolicyPreset[]>(fallbackUsagePolicies);
   const [llm, setLlm] = useState<AdminLlmSettings | null>(null);
   const [llmForm, setLlmForm] = useState<LlmForm>(emptyLlmForm);
   const [loading, setLoading] = useState(true);
@@ -124,12 +150,14 @@ export default function AdminPage() {
     setLoading(true);
     setError("");
     try {
-      const [nextUsers, nextLlm] = await Promise.all([
+      const [nextUsers, nextLlm, nextPolicies] = await Promise.all([
         api.listAdminUsers(),
         api.getAdminLlmSettings(),
+        api.listAdminUsagePolicies().catch(() => fallbackUsagePolicies),
       ]);
       setUsers(nextUsers);
       setLlm(nextLlm);
+      setUsagePolicies(nextPolicies.length ? nextPolicies : fallbackUsagePolicies);
       setLlmForm({
         enabled: nextLlm.enabled,
         provider: nextLlm.provider || "anthropic",
@@ -174,6 +202,21 @@ export default function AdminPage() {
           ? { ...item, user: { ...item.user, ...patch } }
           : item,
       ),
+    );
+  };
+
+  const applyUsagePolicy = (id: string, plan: string) => {
+    const policy = usagePolicies.find((item) => item.plan === plan);
+    updateLocalUser(
+      id,
+      policy
+        ? {
+            plan: policy.plan,
+            search_quota_daily: policy.search_quota_daily,
+            report_quota_monthly: policy.report_quota_monthly,
+            ai_cost_quota_monthly: policy.ai_cost_quota_monthly ?? null,
+          }
+        : { plan },
     );
   };
 
@@ -344,13 +387,22 @@ export default function AdminPage() {
                       <p className="mt-2 text-xs text-muted">{record.user.email}</p>
                     </td>
                     <td className="px-3 py-4">
-                      <input
+                      <select
                         value={record.user.plan}
                         onChange={(event) =>
-                          updateLocalUser(record.user.id, { plan: event.target.value })
+                          applyUsagePolicy(record.user.id, event.target.value)
                         }
-                        className="focus-ring w-24 rounded-md border border-line bg-white px-2.5 py-2 text-ink"
-                      />
+                        className="focus-ring w-28 rounded-md border border-line bg-white px-2.5 py-2 text-ink"
+                      >
+                        {usagePolicies.map((policy) => (
+                          <option key={policy.plan} value={policy.plan}>
+                            {policy.label}
+                          </option>
+                        ))}
+                        {!usagePolicies.some((policy) => policy.plan === record.user.plan) ? (
+                          <option value={record.user.plan}>{record.user.plan}</option>
+                        ) : null}
+                      </select>
                     </td>
                     <td className="px-3 py-4">
                       <select

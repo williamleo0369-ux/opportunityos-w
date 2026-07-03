@@ -95,6 +95,7 @@ from app.services.system_settings import (
     llm_settings_status,
     save_llm_settings,
 )
+from app.services.usage_policies import default_usage_policy, usage_policy_for_plan, usage_policy_presets
 from app.services.ai_agent import test_llm_connection
 
 app = FastAPI(title="OpportunityOS API", version="0.1.0")
@@ -140,23 +141,10 @@ active_search_tasks: dict[str, dict[str, str]] = {}
 SESSION_COOKIE = "opportunity_os_session"
 
 
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return max(0.0, float(os.getenv(name, str(default))))
-    except ValueError:
-        return default
-
-
-DEFAULT_SEARCH_QUOTA = _env_int("OPPORTUNITY_OS_DEFAULT_SEARCH_QUOTA_DAILY", 20)
-DEFAULT_REPORT_QUOTA = _env_int("OPPORTUNITY_OS_DEFAULT_REPORT_QUOTA_MONTHLY", 100)
-DEFAULT_AI_COST_QUOTA = _env_float("OPPORTUNITY_OS_DEFAULT_AI_COST_QUOTA_MONTHLY", 5.0)
+DEFAULT_USAGE_POLICY = default_usage_policy()
+DEFAULT_SEARCH_QUOTA = int(DEFAULT_USAGE_POLICY["search_quota_daily"])
+DEFAULT_REPORT_QUOTA = int(DEFAULT_USAGE_POLICY["report_quota_monthly"])
+DEFAULT_AI_COST_QUOTA = DEFAULT_USAGE_POLICY["ai_cost_quota_monthly"]
 BOOTSTRAP_ADMIN_USERNAME = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_USERNAME", "admin").strip() or "admin"
 BOOTSTRAP_ADMIN_PASSWORD = os.getenv("OPPORTUNITY_OS_BOOTSTRAP_ADMIN_PASSWORD", "admin1212").strip() or "admin1212"
 BOOTSTRAP_ADMIN_EMAIL = (
@@ -281,6 +269,16 @@ def public_user(payload: dict[str, object]) -> User:
     return User.model_validate(payload)
 
 
+def apply_usage_policy(payload: dict[str, object], plan: str | None, *, overwrite: bool = False) -> None:
+    policy = usage_policy_for_plan(plan)
+    if not policy:
+        return
+    payload["plan"] = str(policy["plan"])
+    for key in ("search_quota_daily", "report_quota_monthly", "ai_cost_quota_monthly"):
+        if overwrite or key not in payload or payload.get(key) is None:
+            payload[key] = policy[key]
+
+
 def load_user_payload_by_login(identifier: str) -> dict[str, object] | None:
     normalized = identifier.strip().lower()
     if not normalized:
@@ -310,15 +308,12 @@ def ensure_bootstrap_admin() -> None:
             "password_hash": hash_password(BOOTSTRAP_ADMIN_PASSWORD),
             "username": BOOTSTRAP_ADMIN_USERNAME,
             "avatar_url": payload.get("avatar_url"),
-            "plan": "pro",
             "role": "admin",
             "is_active": True,
-            "search_quota_daily": DEFAULT_SEARCH_QUOTA,
-            "report_quota_monthly": DEFAULT_REPORT_QUOTA,
-            "ai_cost_quota_monthly": payload.get("ai_cost_quota_monthly", DEFAULT_AI_COST_QUOTA),
             "updated_at": now,
         }
     )
+    apply_usage_policy(payload, str(payload.get("plan") or "pro"), overwrite=False)
     upsert_user_payload(payload)
 
 
@@ -857,7 +852,6 @@ def register(request: RegisterRequest, response: Response) -> AuthResponse:
         "password_hash": hash_password(request.password),
         "username": request.username,
         "avatar_url": None,
-        "plan": "starter",
         "role": (
             "admin"
             if request.email.strip().lower()
@@ -869,12 +863,10 @@ def register(request: RegisterRequest, response: Response) -> AuthResponse:
             else "user"
         ),
         "is_active": True,
-        "search_quota_daily": DEFAULT_SEARCH_QUOTA,
-        "report_quota_monthly": DEFAULT_REPORT_QUOTA,
-        "ai_cost_quota_monthly": DEFAULT_AI_COST_QUOTA,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
+    apply_usage_policy(payload, "starter", overwrite=True)
     try:
         create_user_payload(payload)
         sync_state_from_database()
@@ -951,6 +943,13 @@ def admin_update_user(
     new_password = str(changes.pop("password", "") or "").strip()
     if new_password:
         changes["password_hash"] = hash_password(new_password)
+    if "plan" in changes and changes.get("plan"):
+        policy = usage_policy_for_plan(str(changes["plan"]))
+        if policy:
+            changes["plan"] = policy["plan"]
+            for key in ("search_quota_daily", "report_quota_monthly", "ai_cost_quota_monthly"):
+                if key not in request.model_fields_set:
+                    changes[key] = policy[key]
     payload.update(changes)
     payload["updated_at"] = utc_now().isoformat()
     upsert_user_payload(payload)
@@ -965,6 +964,12 @@ def admin_update_user(
         report_count=len(account_reports),
         last_active_at=latest_activity[0].get("created_at") if latest_activity else None,
     )
+
+
+@app.get("/api/admin/usage-policies")
+def admin_usage_policies(admin: User = Depends(require_admin)) -> list[dict[str, int | float | str | None]]:
+    del admin
+    return usage_policy_presets()
 
 
 @app.get("/api/admin/settings/llm")

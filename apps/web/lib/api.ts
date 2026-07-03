@@ -26,6 +26,14 @@ export type UserUsage = {
   ai_cost_remaining_usd?: number | null;
 };
 
+export type UsagePolicyPreset = {
+  plan: string;
+  label: string;
+  search_quota_daily: number;
+  report_quota_monthly: number;
+  ai_cost_quota_monthly?: number | null;
+};
+
 export type AuthResponse = {
   user: User;
   usage: UserUsage;
@@ -587,6 +595,9 @@ export const api = {
   },
   listAdminUsers() {
     return request<AdminUserRecord[]>("/api/admin/users");
+  },
+  listAdminUsagePolicies() {
+    return request<UsagePolicyPreset[]>("/api/admin/usage-policies");
   },
   updateAdminUser(
     id: string,

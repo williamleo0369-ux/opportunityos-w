@@ -42,15 +42,34 @@ function ExploreContent() {
   const router = useRouter();
   const { user, refresh: refreshAuth } = useAuth();
   const [keyword, setKeyword] = useState(params.get("keyword") ?? "pet water fountain");
-  const [industry, setIndustry] = useState("Consumer Product");
-  const [targetMarket, setTargetMarket] = useState("United States");
-  const [language, setLanguage] = useState("zh-CN");
+  const [industry, setIndustry] = useState(params.get("industry") ?? "Consumer Product");
+  const [targetMarket, setTargetMarket] = useState(params.get("target_market") ?? "United States");
+  const [language, setLanguage] = useState(params.get("language") ?? "zh-CN");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [activeTask, setActiveTask] = useState<SearchTask | null>(null);
+
+  useEffect(() => {
+    const nextKeyword = params.get("keyword");
+    if (nextKeyword) {
+      setKeyword(nextKeyword);
+    }
+    const nextIndustry = params.get("industry");
+    if (nextIndustry) {
+      setIndustry(nextIndustry);
+    }
+    const nextTargetMarket = params.get("target_market");
+    if (nextTargetMarket) {
+      setTargetMarket(nextTargetMarket);
+    }
+    const nextLanguage = params.get("language");
+    if (nextLanguage) {
+      setLanguage(nextLanguage);
+    }
+  }, [params]);
 
   useEffect(() => {
     if (!user) return;

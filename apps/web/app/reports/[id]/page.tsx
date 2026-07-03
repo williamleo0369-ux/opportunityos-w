@@ -7,7 +7,7 @@ import { AlertCircle, ArrowLeft, CalendarClock, CheckCircle2, Clock3, Database, 
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { EmptyState, MetricCard, Section } from "@/components/ui";
-import { API_BASE_URL, api, type Report } from "@/lib/api";
+import { API_BASE_URL, api, type Report, type SearchTask } from "@/lib/api";
 
 const reportSections = [
   ["executive", "执行摘要", "executive_summary"],
@@ -75,6 +75,7 @@ export default function ReportDetailPage() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
+  const [sourceTask, setSourceTask] = useState<SearchTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -83,9 +84,14 @@ export default function ReportDetailPage() {
     if (!user) return;
     setLoading(true);
     setError("");
+    setSourceTask(null);
     api
       .getReport(params.id)
-      .then(setReport)
+      .then(async (nextReport) => {
+        setReport(nextReport);
+        const task = await api.getTask(nextReport.search_task_id).catch(() => null);
+        setSourceTask(task);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "报告加载失败"))
       .finally(() => setLoading(false));
   }, [params.id, user]);
@@ -119,6 +125,13 @@ export default function ReportDetailPage() {
       : report.report_score >= 65
         ? "border-violet/20 bg-[#F4F0FF] text-violet"
         : "border-clay/20 bg-clay/10 text-clay";
+  const rerunParams = new URLSearchParams({
+    keyword: sourceTask?.keyword ?? report.report_title.replace(/ Opportunity Report$/i, ""),
+    industry: sourceTask?.industry || "Consumer Product",
+    target_market: sourceTask?.target_market || "United States",
+    language: sourceTask?.language || "zh-CN",
+  });
+  const rerunHref = `/explore?${rerunParams.toString()}`;
   const dataQuality = report.data_quality;
   const hasDataQuality = typeof dataQuality?.confidence_score === "number";
   const sourceCoverage = dataQuality?.sources ?? [];
@@ -148,7 +161,7 @@ export default function ReportDetailPage() {
       key: source.key,
       title: `补采 ${source.label}`,
       description: `${source.category}证据当前不足；建议重新分析关键词，或更换更具体的产品词。`,
-      href: "/",
+      href: rerunHref,
       label: "重新分析",
       icon: Search,
     };
@@ -197,6 +210,13 @@ export default function ReportDetailPage() {
                 <RefreshCw size={16} className={refreshing ? "animate-spin text-indigo" : "text-indigo"} />
                 {refreshing ? "刷新中" : "刷新报告"}
               </button>
+              <Link
+                href={rerunHref}
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-indigo/20 bg-indigo/10 px-4 py-3 text-sm font-semibold text-indigo transition hover:bg-indigo/15"
+              >
+                <Search size={16} />
+                重新分析同一关键词
+              </Link>
               <Link
                 href={`/opportunities/${report.opportunity_id}`}
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo to-violet px-4 py-3 text-sm font-semibold text-white shadow-glow"

@@ -861,6 +861,68 @@ def load_api_logs(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
     return [json.loads(row[0]) for row in rows]
 
 
+def load_agent_run_billing(limit: int = 100) -> list[dict[str, Any]]:
+    initialize_database()
+    placeholder = _placeholder()
+    with connect() as connection:
+        run_rows = connection.execute(
+            "SELECT id, user_id, task_id, opportunity_id, status, created_at, payload "
+            f"FROM agent_runs ORDER BY created_at DESC LIMIT {placeholder}",
+            (limit,),
+        ).fetchall()
+        user_rows = connection.execute("SELECT id, payload FROM users").fetchall()
+        report_rows = connection.execute("SELECT id, payload FROM reports").fetchall()
+
+    users = {str(row[0]): json.loads(row[1]) for row in user_rows}
+    report_by_agent_run: dict[str, str] = {}
+    for report_id, raw_payload in report_rows:
+        payload = json.loads(raw_payload)
+        agent_run = payload.get("agent_run")
+        if isinstance(agent_run, dict) and agent_run.get("id"):
+            report_by_agent_run[str(agent_run["id"])] = str(report_id)
+
+    records: list[dict[str, Any]] = []
+    for run_id, user_id, task_id, opportunity_id, status, created_at, raw_payload in run_rows:
+        payload = json.loads(raw_payload)
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list):
+            steps = []
+        user_payload = users.get(str(user_id), {})
+        input_tokens = int(payload.get("input_tokens") or 0)
+        output_tokens = int(payload.get("output_tokens") or 0)
+        cost = payload.get("estimated_cost_usd")
+        try:
+            estimated_cost = float(cost) if cost is not None else None
+        except (TypeError, ValueError):
+            estimated_cost = None
+        records.append(
+            {
+                "id": str(run_id),
+                "user_id": str(user_id),
+                "user_email": str(user_payload.get("email") or ""),
+                "username": str(user_payload.get("username") or ""),
+                "task_id": str(task_id),
+                "opportunity_id": str(opportunity_id),
+                "report_id": report_by_agent_run.get(str(run_id)),
+                "provider": payload.get("provider"),
+                "model": payload.get("model"),
+                "status": str(status),
+                "started_at": str(created_at),
+                "finished_at": payload.get("finished_at"),
+                "duration_ms": int(payload.get("duration_ms") or 0),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "estimated_cost_usd": estimated_cost,
+                "step_count": len(steps),
+                "completed_steps": sum(1 for step in steps if isinstance(step, dict) and step.get("status") == "completed"),
+                "failed_steps": sum(1 for step in steps if isinstance(step, dict) and step.get("status") == "failed"),
+                "skipped_steps": sum(1 for step in steps if isinstance(step, dict) and step.get("status") == "skipped"),
+            }
+        )
+    return records
+
+
 def replace_source_health_history(history: list[dict[str, Any]]) -> None:
     initialize_database()
     placeholder = _placeholder()

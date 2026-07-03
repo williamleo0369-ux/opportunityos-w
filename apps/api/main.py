@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import threading
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from time import perf_counter
@@ -44,6 +46,7 @@ from app.services.database_store import (
     append_api_log,
     create_user_payload,
     delete_saved_payload,
+    load_agent_run_billing,
     load_api_logs,
     load_saved_payloads,
     load_task_payload,
@@ -970,6 +973,58 @@ def admin_update_user(
 def admin_usage_policies(admin: User = Depends(require_admin)) -> list[dict[str, int | float | str | None]]:
     del admin
     return usage_policy_presets()
+
+
+AGENT_BILLING_FIELDS = [
+    "id",
+    "user_email",
+    "username",
+    "provider",
+    "model",
+    "status",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "estimated_cost_usd",
+    "completed_steps",
+    "failed_steps",
+    "skipped_steps",
+    "task_id",
+    "opportunity_id",
+    "report_id",
+]
+
+
+@app.get("/api/admin/billing/agent-runs")
+def admin_agent_run_billing(
+    limit: int = Query(default=100, ge=1, le=1000),
+    admin: User = Depends(require_admin),
+) -> list[dict[str, object]]:
+    del admin
+    return load_agent_run_billing(limit)
+
+
+@app.get("/api/admin/billing/agent-runs.csv")
+def admin_agent_run_billing_csv(
+    limit: int = Query(default=1000, ge=1, le=5000),
+    admin: User = Depends(require_admin),
+) -> Response:
+    del admin
+    rows = load_agent_run_billing(limit)
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=AGENT_BILLING_FIELDS, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    filename = f"opportunityos-agent-billing-{export_timestamp()}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": download_content_disposition(filename)},
+    )
 
 
 @app.get("/api/admin/settings/llm")

@@ -34,6 +34,30 @@ export type UsagePolicyPreset = {
   ai_cost_quota_monthly?: number | null;
 };
 
+export type AdminAgentBillingRecord = {
+  id: string;
+  user_id: string;
+  user_email: string;
+  username: string;
+  task_id: string;
+  opportunity_id: string;
+  report_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  duration_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+  step_count: number;
+  completed_steps: number;
+  failed_steps: number;
+  skipped_steps: number;
+};
+
 export type AuthResponse = {
   user: User;
   usage: UserUsage;
@@ -598,6 +622,12 @@ export const api = {
   },
   listAdminUsagePolicies() {
     return request<UsagePolicyPreset[]>("/api/admin/usage-policies");
+  },
+  listAdminAgentBilling(limit = 100) {
+    return request<AdminAgentBillingRecord[]>(`/api/admin/billing/agent-runs?limit=${limit}`);
+  },
+  adminAgentBillingCsvUrl(limit = 1000) {
+    return `${API_BASE_URL}/api/admin/billing/agent-runs.csv?limit=${limit}`;
   },
   updateAdminUser(
     id: string,

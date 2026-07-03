@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
+  Download,
   KeyRound,
   Loader2,
   RefreshCw,
+  ReceiptText,
   Save,
   ShieldCheck,
   TestTube2,
@@ -16,6 +18,7 @@ import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import {
   api,
+  type AdminAgentBillingRecord,
   type AdminLlmSettings,
   type AdminLlmTestResult,
   type AdminUserRecord,
@@ -134,6 +137,7 @@ export default function AdminPage() {
   const { user, refresh: refreshAuth } = useAuth();
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
   const [usagePolicies, setUsagePolicies] = useState<UsagePolicyPreset[]>(fallbackUsagePolicies);
+  const [agentBilling, setAgentBilling] = useState<AdminAgentBillingRecord[]>([]);
   const [llm, setLlm] = useState<AdminLlmSettings | null>(null);
   const [llmForm, setLlmForm] = useState<LlmForm>(emptyLlmForm);
   const [loading, setLoading] = useState(true);
@@ -145,19 +149,27 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const providerOptions = llm?.available_providers?.length ? llm.available_providers : fallbackProviders;
+  const totalAgentCost = agentBilling.reduce(
+    (sum, item) => sum + (item.estimated_cost_usd ?? 0),
+    0,
+  );
+  const totalAgentTokens = agentBilling.reduce((sum, item) => sum + item.total_tokens, 0);
+  const failedAgentRuns = agentBilling.filter((item) => item.failed_steps > 0).length;
 
   const loadAdminData = async () => {
     setLoading(true);
     setError("");
     try {
-      const [nextUsers, nextLlm, nextPolicies] = await Promise.all([
+      const [nextUsers, nextLlm, nextPolicies, nextBilling] = await Promise.all([
         api.listAdminUsers(),
         api.getAdminLlmSettings(),
         api.listAdminUsagePolicies().catch(() => fallbackUsagePolicies),
+        api.listAdminAgentBilling(50).catch(() => []),
       ]);
       setUsers(nextUsers);
       setLlm(nextLlm);
       setUsagePolicies(nextPolicies.length ? nextPolicies : fallbackUsagePolicies);
+      setAgentBilling(nextBilling);
       setLlmForm({
         enabled: nextLlm.enabled,
         provider: nextLlm.provider || "anthropic",
@@ -534,6 +546,99 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      <section className="mb-7 border-y border-line bg-white/65 py-6">
+        <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div className="flex items-center gap-3">
+            <ReceiptText className="text-indigo" size={20} />
+            <div>
+              <h2 className="text-xl font-semibold text-ink">AI 账单审计</h2>
+              <p className="mt-1 text-sm text-muted">
+                最近 {agentBilling.length} 次 Agent Run · ${totalAgentCost.toFixed(4)} · {totalAgentTokens.toLocaleString()} tokens
+              </p>
+            </div>
+          </div>
+          <a
+            href={api.adminAgentBillingCsvUrl(1000)}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:bg-field"
+          >
+            <Download size={16} />
+            导出 CSV
+          </a>
+        </div>
+
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl bg-field px-4 py-3">
+            <p className="text-xs text-muted">估算成本</p>
+            <p className="mt-1 text-lg font-semibold text-ink">${totalAgentCost.toFixed(4)}</p>
+          </div>
+          <div className="rounded-xl bg-field px-4 py-3">
+            <p className="text-xs text-muted">Token 用量</p>
+            <p className="mt-1 text-lg font-semibold text-ink">{totalAgentTokens.toLocaleString()}</p>
+          </div>
+          <div className="rounded-xl bg-field px-4 py-3">
+            <p className="text-xs text-muted">含失败阶段</p>
+            <p className="mt-1 text-lg font-semibold text-ink">{failedAgentRuns}</p>
+          </div>
+        </div>
+
+        {agentBilling.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs text-muted">
+                  <th className="px-3 py-3 font-semibold">时间</th>
+                  <th className="px-3 py-3 font-semibold">用户</th>
+                  <th className="px-3 py-3 font-semibold">模型</th>
+                  <th className="px-3 py-3 font-semibold">状态</th>
+                  <th className="px-3 py-3 font-semibold">Tokens</th>
+                  <th className="px-3 py-3 font-semibold">成本</th>
+                  <th className="px-3 py-3 font-semibold">阶段</th>
+                  <th className="px-3 py-3 font-semibold">报告</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agentBilling.map((item) => (
+                  <tr key={item.id} className="border-b border-line/70 align-top">
+                    <td className="px-3 py-4 text-xs text-muted">{formatDate(item.started_at)}</td>
+                    <td className="px-3 py-4">
+                      <p className="font-semibold text-ink">{item.username || "未命名"}</p>
+                      <p className="mt-1 text-xs text-muted">{item.user_email || item.user_id}</p>
+                    </td>
+                    <td className="px-3 py-4">
+                      <p className="font-semibold text-ink">{item.provider ?? "规则降级"}</p>
+                      <p className="mt-1 max-w-[220px] truncate text-xs text-muted">{item.model ?? "未调用模型"}</p>
+                    </td>
+                    <td className="px-3 py-4">
+                      <span className="rounded-md bg-field px-2 py-1 text-xs font-semibold text-muted">
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 text-muted">
+                      <p>{item.total_tokens.toLocaleString()}</p>
+                      <p className="mt-1 text-xs">in {item.input_tokens.toLocaleString()} / out {item.output_tokens.toLocaleString()}</p>
+                    </td>
+                    <td className="px-3 py-4 font-semibold text-ink">
+                      {item.estimated_cost_usd == null ? "--" : `$${item.estimated_cost_usd.toFixed(4)}`}
+                    </td>
+                    <td className="px-3 py-4 text-muted">
+                      <p>{item.completed_steps} 完成</p>
+                      <p className="mt-1 text-xs">{item.failed_steps} 失败 · {item.skipped_steps} 跳过</p>
+                    </td>
+                    <td className="px-3 py-4 text-xs text-muted">
+                      {item.report_id ? item.report_id.slice(0, 8) : "--"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="rounded-xl bg-field px-4 py-6 text-sm text-muted">
+            暂无 Agent 账单记录。生成带 AI Agent 的报告后，这里会显示真实用量。
+          </p>
         )}
       </section>
 

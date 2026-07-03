@@ -274,6 +274,7 @@ class Report(BaseModel):
     innovation_analysis: str
     final_recommendation: str
     data_quality_summary: str = ""
+    data_quality: dict[str, Any] = Field(default_factory=dict)
     agent_run: dict[str, Any] = Field(default_factory=dict)
     report_score: int
     pdf_url: str | None = None

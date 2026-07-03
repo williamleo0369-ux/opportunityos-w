@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, CheckCircle2, Clock3, Download, ExternalLink, FileDown, FileText, Gauge, Layers3, Loader2, RefreshCw, Sparkles, Workflow } from "lucide-react";
+import { AlertCircle, ArrowLeft, CalendarClock, CheckCircle2, Clock3, Database, Download, ExternalLink, FileDown, FileText, Gauge, Layers3, Loader2, RefreshCw, Search, Settings, Sparkles, Workflow } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { EmptyState, MetricCard, Section } from "@/components/ui";
@@ -43,6 +43,32 @@ function agentStatusLabel(status: string) {
     provider_error: "调用失败",
   };
   return labels[status] ?? status;
+}
+
+function confidenceLabel(level?: string) {
+  if (level === "high") return "高可信";
+  if (level === "medium") return "中可信";
+  if (level === "low") return "低可信";
+  return "待评估";
+}
+
+function sourceStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ok: "可用",
+    empty: "无结果",
+    guarded: "需授权",
+    missing_credentials: "未配置",
+    missing_session: "需登录",
+    provider_error: "调用失败",
+    not_recorded: "未记录",
+  };
+  return labels[status] ?? status;
+}
+
+function sourceStatusTone(status: string) {
+  if (status === "ok" || status === "configured") return "bg-indigo/10 text-indigo";
+  if (status === "guarded" || status === "missing_credentials" || status === "missing_session") return "bg-amber-50 text-amber-700";
+  return "bg-clay/10 text-clay";
 }
 
 export default function ReportDetailPage() {
@@ -93,6 +119,41 @@ export default function ReportDetailPage() {
       : report.report_score >= 65
         ? "border-violet/20 bg-[#F4F0FF] text-violet"
         : "border-clay/20 bg-clay/10 text-clay";
+  const dataQuality = report.data_quality;
+  const hasDataQuality = typeof dataQuality?.confidence_score === "number";
+  const sourceCoverage = dataQuality?.sources ?? [];
+  const actionableSources = sourceCoverage.filter((source) => source.status !== "ok" && source.status !== "configured");
+  const remediationActions = actionableSources.slice(0, 4).map((source) => {
+    if (source.key === "1688") {
+      return {
+        key: source.key,
+        title: "连接 1688 会话",
+        description: "补齐国内供应商、MOQ 与报价证据；连接后建议重新分析同一关键词。",
+        href: "/settings",
+        label: "去设置",
+        icon: Settings,
+      };
+    }
+    if (source.key === "llm_agent") {
+      return {
+        key: source.key,
+        title: user?.role === "admin" ? "检查 AI API 配置" : "联系管理员启用 AI",
+        description: "Agent 未完整完成时，报告会使用规则降级；配置可用模型后再重新生成。",
+        href: user?.role === "admin" ? "/admin" : "/settings",
+        label: user?.role === "admin" ? "去后台" : "查看设置",
+        icon: Sparkles,
+      };
+    }
+    return {
+      key: source.key,
+      title: `补采 ${source.label}`,
+      description: `${source.category}证据当前不足；建议重新分析关键词，或更换更具体的产品词。`,
+      href: "/",
+      label: "重新分析",
+      icon: Search,
+    };
+  });
+  const visibleGaps = dataQuality?.gaps?.slice(0, 3) ?? [];
 
   async function refreshCurrentReport(reportId: string) {
     setRefreshing(true);
@@ -166,6 +227,105 @@ export default function ReportDetailPage() {
         <MetricCard label="导出格式" value="4" detail="MD / PDF / Excel / Word" icon={FileDown} />
         <MetricCard label="生成时间" value={createdAt.toLocaleDateString()} detail={createdAt.toLocaleTimeString()} icon={CalendarClock} />
       </div>
+
+      {hasDataQuality && dataQuality ? (
+        <div className="mb-6 rounded-2xl border border-line bg-white p-6 shadow-panel">
+          <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div>
+              <p className="text-sm font-semibold text-muted">数据可信度</p>
+              <h2 className="mt-1 text-2xl font-semibold text-ink">
+                {dataQuality.confidence_score}/100 · {confidenceLabel(dataQuality.confidence_level)}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                这里显示真实数据源覆盖情况和可补强动作；不会把内部采集失败日志直接暴露为结论。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => refreshCurrentReport(report.id)}
+              disabled={refreshing}
+              className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-field disabled:opacity-60"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin text-indigo" : "text-indigo"} />
+              刷新结构化摘要
+            </button>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-xl bg-field p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+                <Database size={16} className="text-indigo" />
+                来源覆盖
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {sourceCoverage.map((source) => (
+                  <div key={source.key} className="rounded-lg border border-line bg-white px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-ink">{source.label}</span>
+                        <span className="mt-0.5 block text-xs text-muted">{source.category} · {source.count} signals</span>
+                      </span>
+                      <span className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold ${sourceStatusTone(source.status)}`}>
+                        {sourceStatusLabel(source.status)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-line bg-white p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+                <AlertCircle size={16} className="text-indigo" />
+                建议动作
+              </div>
+              {remediationActions.length ? (
+                <div className="grid gap-3">
+                  {remediationActions.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                      <div key={action.key} className="flex flex-col gap-3 rounded-lg bg-field px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-indigo/10 text-indigo">
+                            <Icon size={17} />
+                          </span>
+                          <span>
+                            <span className="block text-sm font-semibold text-ink">{action.title}</span>
+                            <span className="mt-1 block text-xs leading-5 text-muted">{action.description}</span>
+                          </span>
+                        </div>
+                        <Link
+                          href={action.href}
+                          className="focus-ring inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo px-3 py-2 text-xs font-semibold text-white"
+                        >
+                          {action.label}
+                          <ExternalLink size={13} />
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-lg bg-indigo/10 px-3 py-4 text-sm font-semibold text-indigo">
+                  主要数据源已覆盖，本报告可进入下一步人工复核或小额验证。
+                </p>
+              )}
+              {visibleGaps.length ? (
+                <div className="mt-4 border-t border-line pt-3">
+                  <p className="mb-2 text-xs font-semibold text-muted">当前限制</p>
+                  <div className="space-y-2">
+                    {visibleGaps.map((gap) => (
+                      <p key={gap} className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                        {gap}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {report.agent_run?.id ? (
         <div className="mb-6">

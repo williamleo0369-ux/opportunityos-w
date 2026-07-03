@@ -769,6 +769,7 @@ Overall score: {opportunity.opportunity_score}/100. Recommendation: {opportunity
         innovation_analysis=innovation_analysis,
         final_recommendation=final,
         data_quality_summary=quality_summary,
+        data_quality=data_quality,
         agent_run=agent_result.to_trace() if agent_result else {},
         report_score=opportunity.opportunity_score,
         markdown_content=markdown,

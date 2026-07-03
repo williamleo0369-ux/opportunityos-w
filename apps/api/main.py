@@ -80,7 +80,7 @@ from app.services.exporters import (
     safe_filename,
     xlsx_bytes,
 )
-from app.services.data_quality import build_data_quality
+from app.services.data_quality import build_data_quality, data_quality_markdown
 from app.services.health_scheduler import SourceHealthScheduler
 from app.services.pipeline import build_report, run_pipeline
 from app.services.real_sources import normalize_1688_cookie, probe_1688_supply_status
@@ -1404,6 +1404,28 @@ def competitor_summary(opportunity_id: str) -> dict[str, float | int | str]:
     }
 
 
+def report_with_data_quality(report: Report) -> Report:
+    if report.data_quality:
+        return report
+    opportunity_id = report.opportunity_id
+    trend_rows = trends.get(opportunity_id, [])
+    if not trend_rows:
+        return report
+    return report.model_copy(
+        update={
+            "data_quality": build_data_quality(
+                trend_rows=trend_rows,
+                patents=patents.get(opportunity_id, []),
+                competitors=competitors.get(opportunity_id, []),
+                pain_points=pain_points.get(opportunity_id, []),
+                supply_chain=supply_chain.get(opportunity_id, []),
+                innovation_ideas=innovation_ideas.get(opportunity_id, []),
+                agent_result=report.agent_run,
+            )
+        }
+    )
+
+
 @app.get("/api/opportunities/{opportunity_id}", response_model=OpportunityDetail)
 def get_opportunity(
     opportunity_id: str,
@@ -1543,6 +1565,16 @@ def rebuild_report_for_opportunity(opportunity: Opportunity, existing: Report | 
         report.id = existing.id
         report.created_at = existing.created_at
         report.agent_run = existing.agent_run
+        report.data_quality = build_data_quality(
+            trend_rows=trend_rows,
+            patents=patent_rows,
+            competitors=competitor_rows,
+            pain_points=pain_rows,
+            supply_chain=supply_rows,
+            innovation_ideas=idea_rows,
+            agent_result=report.agent_run,
+        )
+        report.data_quality_summary = data_quality_markdown(report.data_quality)
     reports[report.id] = report
     upsert_report_payload(report.model_dump(mode="json"))
     return report
@@ -1576,7 +1608,7 @@ def refresh_report(
 @app.get("/api/reports", response_model=list[Report])
 def list_reports(user: User = Depends(current_user)) -> list[Report]:
     return sorted(
-        (item for item in reports.values() if item.user_id == user.id),
+        (report_with_data_quality(item) for item in reports.values() if item.user_id == user.id),
         key=lambda item: item.created_at,
         reverse=True,
     )
@@ -1584,7 +1616,7 @@ def list_reports(user: User = Depends(current_user)) -> list[Report]:
 
 @app.get("/api/reports/{report_id}", response_model=Report)
 def get_report(report_id: str, user: User = Depends(current_user)) -> Report:
-    return require_report_owner(report_id, user)
+    return report_with_data_quality(require_report_owner(report_id, user))
 
 
 @app.get("/api/reports/{report_id}/download")

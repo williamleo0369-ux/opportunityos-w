@@ -280,6 +280,7 @@ export type Report = {
   innovation_analysis: string;
   final_recommendation: string;
   data_quality_summary?: string;
+  data_quality?: DataQuality;
   agent_run?: AgentRun;
   report_score: number;
   markdown_content: string;

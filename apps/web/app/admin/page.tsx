@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Download,
@@ -138,6 +138,8 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
   const [usagePolicies, setUsagePolicies] = useState<UsagePolicyPreset[]>(fallbackUsagePolicies);
   const [agentBilling, setAgentBilling] = useState<AdminAgentBillingRecord[]>([]);
+  const [billingUserFilter, setBillingUserFilter] = useState("all");
+  const [billingStatusFilter, setBillingStatusFilter] = useState("all");
   const [llm, setLlm] = useState<AdminLlmSettings | null>(null);
   const [llmForm, setLlmForm] = useState<LlmForm>(emptyLlmForm);
   const [loading, setLoading] = useState(true);
@@ -149,12 +151,54 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const providerOptions = llm?.available_providers?.length ? llm.available_providers : fallbackProviders;
-  const totalAgentCost = agentBilling.reduce(
+  const filteredAgentBilling = useMemo(
+    () =>
+      agentBilling.filter((item) => {
+        const userMatches = billingUserFilter === "all" || item.user_id === billingUserFilter;
+        const statusMatches = billingStatusFilter === "all" || item.status === billingStatusFilter;
+        return userMatches && statusMatches;
+      }),
+    [agentBilling, billingStatusFilter, billingUserFilter],
+  );
+  const billingStatusOptions = useMemo(
+    () => Array.from(new Set(agentBilling.map((item) => item.status))).filter(Boolean).sort(),
+    [agentBilling],
+  );
+  const billingTrend = useMemo(() => {
+    const grouped = new Map<string, { label: string; cost: number; tokens: number; runs: number }>();
+    for (const item of filteredAgentBilling) {
+      const date = new Date(item.started_at);
+      if (Number.isNaN(date.getTime())) {
+        continue;
+      }
+      const key = date.toISOString().slice(0, 10);
+      const previous = grouped.get(key) ?? {
+        label: key.slice(5).replace("-", "/"),
+        cost: 0,
+        tokens: 0,
+        runs: 0,
+      };
+      previous.cost += item.estimated_cost_usd ?? 0;
+      previous.tokens += item.total_tokens;
+      previous.runs += 1;
+      grouped.set(key, previous);
+    }
+    return Array.from(grouped.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-7)
+      .map(([, value]) => value);
+  }, [filteredAgentBilling]);
+  const maxTrendCost = Math.max(...billingTrend.map((item) => item.cost), 0.0001);
+  const activeBillingFilters = {
+    user_id: billingUserFilter === "all" ? undefined : billingUserFilter,
+    status: billingStatusFilter === "all" ? undefined : billingStatusFilter,
+  };
+  const totalAgentCost = filteredAgentBilling.reduce(
     (sum, item) => sum + (item.estimated_cost_usd ?? 0),
     0,
   );
-  const totalAgentTokens = agentBilling.reduce((sum, item) => sum + item.total_tokens, 0);
-  const failedAgentRuns = agentBilling.filter((item) => item.failed_steps > 0).length;
+  const totalAgentTokens = filteredAgentBilling.reduce((sum, item) => sum + item.total_tokens, 0);
+  const failedAgentRuns = filteredAgentBilling.filter((item) => item.failed_steps > 0).length;
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -164,7 +208,7 @@ export default function AdminPage() {
         api.listAdminUsers(),
         api.getAdminLlmSettings(),
         api.listAdminUsagePolicies().catch(() => fallbackUsagePolicies),
-        api.listAdminAgentBilling(50).catch(() => []),
+        api.listAdminAgentBilling(250).catch(() => []),
       ]);
       setUsers(nextUsers);
       setLlm(nextLlm);
@@ -556,17 +600,54 @@ export default function AdminPage() {
             <div>
               <h2 className="text-xl font-semibold text-ink">AI 账单审计</h2>
               <p className="mt-1 text-sm text-muted">
-                最近 {agentBilling.length} 次 Agent Run · ${totalAgentCost.toFixed(4)} · {totalAgentTokens.toLocaleString()} tokens
+                当前视图 {filteredAgentBilling.length} 次 Agent Run · ${totalAgentCost.toFixed(4)} · {totalAgentTokens.toLocaleString()} tokens
               </p>
             </div>
           </div>
           <a
-            href={api.adminAgentBillingCsvUrl(1000)}
+            href={api.adminAgentBillingCsvUrl(1000, activeBillingFilters)}
             className="focus-ring inline-flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm hover:bg-field"
           >
             <Download size={16} />
             导出 CSV
           </a>
+        </div>
+
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <label className="block">
+            <span className="text-xs font-semibold text-muted">用户筛选</span>
+            <select
+              value={billingUserFilter}
+              onChange={(event) => setBillingUserFilter(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
+            >
+              <option value="all">全部用户</option>
+              {users.map((record) => (
+                <option key={record.user.id} value={record.user.id}>
+                  {record.user.username || record.user.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-muted">状态筛选</span>
+            <select
+              value={billingStatusFilter}
+              onChange={(event) => setBillingStatusFilter(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
+            >
+              <option value="all">全部状态</option>
+              {billingStatusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="rounded-xl bg-field px-4 py-3">
+            <p className="text-xs text-muted">原始记录</p>
+            <p className="mt-1 text-lg font-semibold text-ink">{agentBilling.length.toLocaleString()}</p>
+          </div>
         </div>
 
         <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -584,7 +665,32 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {agentBilling.length ? (
+        {billingTrend.length ? (
+          <div className="mb-4 rounded-xl border border-line bg-white px-4 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-ink">近 7 日成本趋势</p>
+              <p className="text-xs text-muted">按当前筛选条件统计</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-7">
+              {billingTrend.map((item) => (
+                <div key={item.label} className="min-w-0">
+                  <div className="flex h-20 items-end rounded-lg bg-field px-2 py-2">
+                    <div
+                      className="w-full rounded-md bg-indigo"
+                      style={{ height: `${Math.max(8, (item.cost / maxTrendCost) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-ink">{item.label}</p>
+                  <p className="mt-1 text-[11px] text-muted">
+                    ${item.cost.toFixed(4)} · {item.runs} 次
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {filteredAgentBilling.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead>
@@ -600,7 +706,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {agentBilling.map((item) => (
+                {filteredAgentBilling.map((item) => (
                   <tr key={item.id} className="border-b border-line/70 align-top">
                     <td className="px-3 py-4 text-xs text-muted">{formatDate(item.started_at)}</td>
                     <td className="px-3 py-4">
@@ -637,7 +743,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <p className="rounded-xl bg-field px-4 py-6 text-sm text-muted">
-            暂无 Agent 账单记录。生成带 AI Agent 的报告后，这里会显示真实用量。
+            当前筛选条件下暂无 Agent 账单记录。生成带 AI Agent 的报告后，这里会显示真实用量。
           </p>
         )}
       </section>

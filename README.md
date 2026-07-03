@@ -142,8 +142,8 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/{user_id}`
 - `GET /api/admin/usage-policies`
-- `GET /api/admin/billing/agent-runs`
-- `GET /api/admin/billing/agent-runs.csv`
+- `GET /api/admin/billing/agent-runs?limit=100&user_id={user_id}&status={status}`
+- `GET /api/admin/billing/agent-runs.csv?limit=1000&user_id={user_id}&status={status}`
 - `GET /api/admin/settings/llm`
 - `PUT /api/admin/settings/llm`
 - `DELETE /api/admin/settings/llm`
@@ -188,4 +188,4 @@ Existing reports can be refreshed from the stored real evidence without rerunnin
 
 - Add local model provider adapters after managed OpenAI-compatible routing.
 - Replace full-state refreshes with endpoint-specific repository queries as data volume grows.
-- Add billing trend charts and per-user AI usage filters.
+- Add report-side source gap remediation actions for sources that need credentials or paid API access.

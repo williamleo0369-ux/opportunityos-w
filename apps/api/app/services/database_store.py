@@ -861,14 +861,28 @@ def load_api_logs(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
     return [json.loads(row[0]) for row in rows]
 
 
-def load_agent_run_billing(limit: int = 100) -> list[dict[str, Any]]:
+def load_agent_run_billing(
+    limit: int = 100,
+    user_id: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
     initialize_database()
     placeholder = _placeholder()
+    filters: list[str] = []
+    params: list[Any] = []
+    if user_id:
+        filters.append(f"user_id = {placeholder}")
+        params.append(user_id)
+    if status:
+        filters.append(f"status = {placeholder}")
+        params.append(status)
+    where_sql = f"WHERE {' AND '.join(filters)} " if filters else ""
+    params.append(limit)
     with connect() as connection:
         run_rows = connection.execute(
             "SELECT id, user_id, task_id, opportunity_id, status, created_at, payload "
-            f"FROM agent_runs ORDER BY created_at DESC LIMIT {placeholder}",
-            (limit,),
+            f"FROM agent_runs {where_sql}ORDER BY created_at DESC LIMIT {placeholder}",
+            tuple(params),
         ).fetchall()
         user_rows = connection.execute("SELECT id, payload FROM users").fetchall()
         report_rows = connection.execute("SELECT id, payload FROM reports").fetchall()

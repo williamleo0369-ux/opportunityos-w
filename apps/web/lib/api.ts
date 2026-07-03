@@ -623,11 +623,31 @@ export const api = {
   listAdminUsagePolicies() {
     return request<UsagePolicyPreset[]>("/api/admin/usage-policies");
   },
-  listAdminAgentBilling(limit = 100) {
-    return request<AdminAgentBillingRecord[]>(`/api/admin/billing/agent-runs?limit=${limit}`);
+  listAdminAgentBilling(
+    limit = 100,
+    filters: { user_id?: string; status?: string } = {},
+  ) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (filters.user_id) {
+      params.set("user_id", filters.user_id);
+    }
+    if (filters.status) {
+      params.set("status", filters.status);
+    }
+    return request<AdminAgentBillingRecord[]>(`/api/admin/billing/agent-runs?${params.toString()}`);
   },
-  adminAgentBillingCsvUrl(limit = 1000) {
-    return `${API_BASE_URL}/api/admin/billing/agent-runs.csv?limit=${limit}`;
+  adminAgentBillingCsvUrl(
+    limit = 1000,
+    filters: { user_id?: string; status?: string } = {},
+  ) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (filters.user_id) {
+      params.set("user_id", filters.user_id);
+    }
+    if (filters.status) {
+      params.set("status", filters.status);
+    }
+    return `${API_BASE_URL}/api/admin/billing/agent-runs.csv?${params.toString()}`;
   },
   updateAdminUser(
     id: string,

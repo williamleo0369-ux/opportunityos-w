@@ -1001,19 +1001,23 @@ AGENT_BILLING_FIELDS = [
 @app.get("/api/admin/billing/agent-runs")
 def admin_agent_run_billing(
     limit: int = Query(default=100, ge=1, le=1000),
+    user_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
     admin: User = Depends(require_admin),
 ) -> list[dict[str, object]]:
     del admin
-    return load_agent_run_billing(limit)
+    return load_agent_run_billing(limit, user_id=user_id, status=status)
 
 
 @app.get("/api/admin/billing/agent-runs.csv")
 def admin_agent_run_billing_csv(
     limit: int = Query(default=1000, ge=1, le=5000),
+    user_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
     admin: User = Depends(require_admin),
 ) -> Response:
     del admin
-    rows = load_agent_run_billing(limit)
+    rows = load_agent_run_billing(limit, user_id=user_id, status=status)
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=AGENT_BILLING_FIELDS, extrasaction="ignore")
     writer.writeheader()

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, CheckCircle2, CircleDashed, Clock3, FileText, Loader2, Plug, Search, Sparkles, Workflow } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState, MetricCard, Section } from "@/components/ui";
-import { api, type Opportunity, type SearchTask } from "@/lib/api";
+import { api, type Opportunity, type SearchQueueStatus, type SearchTask } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 
 const statusLabels: Record<string, string> = {
@@ -37,6 +37,19 @@ const pipelineSteps = [
   "completed",
 ];
 
+const queueHealthLabel = (health?: string) => {
+  if (health === "healthy") return "在线";
+  if (health === "offline") return "离线";
+  if (health === "degraded") return "需关注";
+  return "未知";
+};
+
+const queueHealthClass = (health?: string) => {
+  if (health === "healthy") return "bg-indigo/10 text-indigo";
+  if (health === "offline") return "bg-clay/10 text-clay";
+  return "bg-amber-50 text-amber-700";
+};
+
 function ExploreContent() {
   const params = useSearchParams();
   const router = useRouter();
@@ -50,6 +63,7 @@ function ExploreContent() {
   const [error, setError] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
+  const [queueStatus, setQueueStatus] = useState<SearchQueueStatus | null>(null);
   const [activeTask, setActiveTask] = useState<SearchTask | null>(null);
 
   useEffect(() => {
@@ -76,13 +90,37 @@ function ExploreContent() {
     refreshWorkspace();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || !queueStatus?.active_count) return;
+    const interval = window.setInterval(() => {
+      void refreshWorkspace();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [queueStatus?.active_count, user]);
+
+  useEffect(() => {
+    if (!activeTask || ["completed", "failed", "cancelled"].includes(activeTask.status)) return;
+    const interval = window.setInterval(() => {
+      void api
+        .getTask(activeTask.id)
+        .then((task) => {
+          setActiveTask(task);
+          setStatus(`${statusLabels[task.current_step] ?? task.current_step} · ${task.progress}%`);
+        })
+        .catch(() => null);
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [activeTask?.id, activeTask?.status]);
+
   async function refreshWorkspace() {
-    const [opportunityRows, taskRows] = await Promise.all([
+    const [opportunityRows, taskRows, nextQueueStatus] = await Promise.all([
       api.listOpportunities().catch(() => []),
       api.listTasks().catch(() => []),
+      api.getSearchQueueStatus().catch(() => null),
     ]);
     setOpportunities(opportunityRows);
     setTasks(taskRows);
+    setQueueStatus(nextQueueStatus);
   }
 
   async function waitForTask(taskId: string) {
@@ -167,6 +205,7 @@ function ExploreContent() {
 
   const visibleTask = activeTask ?? tasks[0];
   const currentStepIndex = visibleTask ? Math.max(0, pipelineSteps.indexOf(visibleTask.current_step)) : -1;
+  const queueModeLabel = queueStatus?.mode === "celery" ? "Celery / Redis" : "本地进程";
 
   return (
     <AppShell>
@@ -253,6 +292,55 @@ function ExploreContent() {
           <MetricCard label="分析链路" value="P0" detail="搜索、分析、评分、报告、详情页已接通" icon={Workflow} />
           <MetricCard label="目标耗时" value="<60s" detail="真实数据源采集，慢源会降级为空结果" icon={Clock3} />
           <MetricCard label="数据源" value="API" detail="爬虫和 AI 模块保持可替换接口" icon={Plug} />
+          {queueStatus ? (
+            <section className="rounded-2xl border border-line bg-white p-5 shadow-panel sm:col-span-3 lg:col-span-1">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-muted">后台队列</p>
+                  <p className="mt-1 text-lg font-semibold text-ink">{queueModeLabel}</p>
+                </div>
+                <span className={`rounded-md px-2 py-1 text-xs font-semibold ${queueHealthClass(queueStatus.health)}`}>
+                  {queueHealthLabel(queueStatus.health)}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {[
+                  ["运行", queueStatus.running_count],
+                  ["排队", queueStatus.queued_count],
+                  ["需重试", queueStatus.stale_non_terminal_count],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-field px-3 py-2">
+                    <p className="text-xs text-muted">{label}</p>
+                    <p className="mt-1 text-lg font-semibold text-indigo">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {queueStatus.health_reason ? (
+                <p className="mt-3 text-xs leading-5 text-muted">{queueStatus.health_reason}</p>
+              ) : null}
+              {queueStatus.active_tasks.length ? (
+                <div className="mt-3 space-y-2">
+                  {queueStatus.active_tasks.slice(0, 2).map((task) => (
+                    <button
+                      type="button"
+                      key={task.id}
+                      onClick={() => {
+                        void api.getTask(task.id).then(setActiveTask).catch(() => null);
+                      }}
+                      className="focus-ring w-full rounded-lg border border-line bg-field/70 px-3 py-2 text-left text-xs transition hover:border-indigo/30"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate font-semibold text-ink">{task.keyword}</span>
+                        <span className="shrink-0 rounded-md bg-indigo/10 px-2 py-0.5 font-semibold text-indigo">
+                          {task.state === "running" ? "运行中" : "排队中"}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </div>
 

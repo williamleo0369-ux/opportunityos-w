@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, CalendarClock, CheckCircle2, Clock3, Database, Download, ExternalLink, FileDown, FileText, Gauge, Layers3, Loader2, RefreshCw, Search, Settings, Sparkles, Workflow } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
@@ -73,11 +73,14 @@ function sourceStatusTone(status: string) {
 
 export default function ReportDetailPage() {
   const params = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, refresh: refreshAuth } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
   const [sourceTask, setSourceTask] = useState<SearchTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
+  const [confirmingRerun, setConfirmingRerun] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -109,7 +112,7 @@ export default function ReportDetailPage() {
     );
   }
 
-  if (error || !report) {
+  if (!report) {
     return (
       <AppShell>
         <EmptyState title="未找到报告" description={error || "请回到报告中心重新打开。"} />
@@ -180,6 +183,26 @@ export default function ReportDetailPage() {
     }
   }
 
+  async function rerunAnalysis() {
+    if (!sourceTask) {
+      setError("原始搜索任务暂不可用，请返回机会探索页重新提交关键词。");
+      setConfirmingRerun(false);
+      return;
+    }
+    setRerunning(true);
+    setError("");
+    try {
+      const created = await api.retryTask(sourceTask.id);
+      await refreshAuth().catch(() => null);
+      router.push(`/explore?task_id=${encodeURIComponent(created.task_id)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "重新分析创建失败");
+      setConfirmingRerun(false);
+    } finally {
+      setRerunning(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="mb-6 overflow-hidden rounded-2xl border border-line/80 bg-white shadow-panel">
@@ -210,13 +233,40 @@ export default function ReportDetailPage() {
                 <RefreshCw size={16} className={refreshing ? "animate-spin text-indigo" : "text-indigo"} />
                 {refreshing ? "刷新中" : "刷新报告"}
               </button>
-              <Link
-                href={rerunHref}
-                className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-indigo/20 bg-indigo/10 px-4 py-3 text-sm font-semibold text-indigo transition hover:bg-indigo/15"
-              >
-                <Search size={16} />
-                重新分析同一关键词
-              </Link>
+              {confirmingRerun ? (
+                <div className="rounded-xl border border-indigo/20 bg-indigo/5 p-3">
+                  <p className="text-sm font-semibold text-ink">创建一轮全新分析？</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">沿用原关键词与市场参数，并消耗一次搜索额度。</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingRerun(false)}
+                      disabled={rerunning}
+                      className="focus-ring rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink disabled:opacity-60"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rerunAnalysis}
+                      disabled={rerunning}
+                      className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-indigo px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      {rerunning ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      {rerunning ? "创建中" : "确认重跑"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRerun(true)}
+                  className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-indigo/20 bg-indigo/10 px-4 py-3 text-sm font-semibold text-indigo transition hover:bg-indigo/15"
+                >
+                  <Search size={16} />
+                  一键重新分析
+                </button>
+              )}
               <Link
                 href={`/opportunities/${report.opportunity_id}`}
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo to-violet px-4 py-3 text-sm font-semibold text-white shadow-glow"

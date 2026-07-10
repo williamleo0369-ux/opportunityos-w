@@ -52,6 +52,7 @@ const queueHealthClass = (health?: string) => {
 
 function ExploreContent() {
   const params = useSearchParams();
+  const requestedTaskId = params.get("task_id");
   const router = useRouter();
   const { user, refresh: refreshAuth } = useAuth();
   const [keyword, setKeyword] = useState(params.get("keyword") ?? "pet water fountain");
@@ -91,6 +92,18 @@ function ExploreContent() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || !requestedTaskId) return;
+    setError("");
+    void api
+      .getTask(requestedTaskId)
+      .then((task) => {
+        setActiveTask(task);
+        setStatus(`${statusLabels[task.current_step] ?? task.current_step} · ${task.progress}%`);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "任务加载失败"));
+  }, [requestedTaskId, user]);
+
+  useEffect(() => {
     if (!user || !queueStatus?.active_count) return;
     const interval = window.setInterval(() => {
       void refreshWorkspace();
@@ -106,11 +119,27 @@ function ExploreContent() {
         .then((task) => {
           setActiveTask(task);
           setStatus(`${statusLabels[task.current_step] ?? task.current_step} · ${task.progress}%`);
+          if (task.status === "failed") {
+            setError(task.error_message || "分析任务失败，可在当前生成状态中重试。");
+          } else if (task.status === "cancelled") {
+            setError("分析任务已取消，可在当前生成状态中重新创建。");
+          }
         })
         .catch(() => null);
     }, 3000);
     return () => window.clearInterval(interval);
   }, [activeTask?.id, activeTask?.status]);
+
+  useEffect(() => {
+    if (!requestedTaskId || activeTask?.id !== requestedTaskId || activeTask.status !== "completed") return;
+    if (activeTask.report_id) {
+      router.replace(`/reports/${activeTask.report_id}`);
+      return;
+    }
+    if (activeTask.opportunity_id) {
+      router.replace(`/opportunities/${activeTask.opportunity_id}`);
+    }
+  }, [activeTask?.id, activeTask?.opportunity_id, activeTask?.report_id, activeTask?.status, requestedTaskId, router]);
 
   async function refreshWorkspace() {
     const [opportunityRows, taskRows, nextQueueStatus] = await Promise.all([

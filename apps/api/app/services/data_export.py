@@ -26,6 +26,7 @@ def data_export_zip(payload: dict[str, Any], reports: dict[str, Report]) -> byte
             "opportunities": len(payload.get("opportunities", {})),
             "reports": len(payload.get("reports", {})),
             "saved": len(payload.get("saved", {})),
+            "supplier_catalog": len(payload.get("supplier_catalog", [])),
             "source_health_checks": len(payload.get("source_health_history", [])),
         },
         "files": [

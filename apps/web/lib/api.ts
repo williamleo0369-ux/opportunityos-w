@@ -332,6 +332,27 @@ export type SystemStatus = {
   };
 };
 
+export type SupplierCatalogItem = {
+  id: string;
+  keyword: string;
+  supplier_name: string;
+  product_title: string;
+  platform: string;
+  unit_price_min: number;
+  unit_price_max: number;
+  moq: number;
+  location: string;
+  supplier_url: string;
+  notes: string;
+  imported_at: string;
+};
+
+export type SupplierCatalog = {
+  count: number;
+  updated_at?: string | null;
+  items: SupplierCatalogItem[];
+};
+
 export type SearchQueueStatus = {
   mode: "local" | "celery";
   broker_url?: string | null;
@@ -617,6 +638,23 @@ export const api = {
     return request<SourceCredentialStatus>("/api/source-credentials/1688", {
       method: "DELETE",
     });
+  },
+  getSupplierCatalog() {
+    return request<SupplierCatalog>("/api/supplier-catalog");
+  },
+  importSupplierCatalog(csvText: string) {
+    return request<SupplierCatalog>("/api/supplier-catalog/import", {
+      method: "POST",
+      body: JSON.stringify({ csv_text: csvText }),
+    });
+  },
+  clearSupplierCatalog() {
+    return request<SupplierCatalog>("/api/supplier-catalog", {
+      method: "DELETE",
+    });
+  },
+  supplierCatalogTemplateUrl() {
+    return `${API_BASE_URL}/api/supplier-catalog/template`;
   },
   listAdminUsers() {
     return request<AdminUserRecord[]>("/api/admin/users");

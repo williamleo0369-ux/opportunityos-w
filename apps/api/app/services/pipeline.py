@@ -21,7 +21,6 @@ from app.services.ai_agent import AgentResult, finalize_opportunity_agent, run_o
 from app.services.data_quality import build_data_quality, data_quality_markdown
 from app.services.database_store import load_user_payload, user_usage
 from app.services.real_sources import (
-    collect_1688_supply_chain,
     collect_amazon_competitors,
     collect_amazon_product_reviews,
     collect_alibaba_supply_chain,
@@ -31,7 +30,7 @@ from app.services.real_sources import (
     collect_trend_signal,
     ReviewSignal,
 )
-from app.services.source_credentials import CredentialDecryptionError, load_1688_cookie
+from app.services.supplier_catalog import collect_supplier_catalog
 
 
 def now() -> datetime:
@@ -299,12 +298,8 @@ def generate_supply_chain(
 ) -> list[SupplyChainItem]:
     supply_rows: list[SupplyChainItem] = []
     seen: set[tuple[str, str]] = set()
-    try:
-        cookie_1688 = load_1688_cookie(user_id)
-    except CredentialDecryptionError:
-        cookie_1688 = ""
     signals = [
-        *collect_1688_supply_chain(keyword, limit=4, cookie=cookie_1688 or None),
+        *collect_supplier_catalog(user_id, keyword, limit=8),
         *collect_alibaba_supply_chain(keyword, limit=6),
         *collect_ec21_supply_chain(keyword, limit=6),
     ]

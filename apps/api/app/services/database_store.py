@@ -256,6 +256,15 @@ def _initialize_database_locked() -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS supplier_catalog (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            keyword TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS agent_runs (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
@@ -296,6 +305,8 @@ def _initialize_database_locked() -> None:
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
         "CREATE INDEX IF NOT EXISTS idx_api_logs_user ON api_logs(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_source_credentials_user ON source_credentials(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_supplier_catalog_user ON supplier_catalog(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_supplier_catalog_keyword ON supplier_catalog(user_id, keyword)",
         "CREATE INDEX IF NOT EXISTS idx_agent_runs_user ON agent_runs(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_agent_runs_opportunity ON agent_runs(opportunity_id)",
     ]
@@ -773,6 +784,55 @@ def delete_source_credential_payload(user_id: str, source: str) -> None:
         connection.commit()
 
 
+def load_supplier_catalog_payloads(user_id: str) -> list[dict[str, Any]]:
+    initialize_database()
+    placeholder = _placeholder()
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT payload FROM supplier_catalog "
+            f"WHERE user_id = {placeholder} ORDER BY created_at DESC, id ASC",
+            (user_id,),
+        ).fetchall()
+    return [json.loads(row[0]) for row in rows]
+
+
+def replace_supplier_catalog_payloads(user_id: str, rows: list[dict[str, Any]]) -> None:
+    initialize_database()
+    placeholder = _placeholder()
+    with connect() as connection:
+        connection.execute(
+            f"DELETE FROM supplier_catalog WHERE user_id = {placeholder}",
+            (user_id,),
+        )
+        if rows:
+            connection.executemany(
+                "INSERT INTO supplier_catalog (id, user_id, keyword, created_at, payload) "
+                f"VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})",
+                [
+                    (
+                        str(row["id"]),
+                        user_id,
+                        str(row.get("keyword", "")).strip().lower(),
+                        str(row["imported_at"]),
+                        _json_payload(row),
+                    )
+                    for row in rows
+                ],
+            )
+        connection.commit()
+
+
+def delete_supplier_catalog_payloads(user_id: str) -> None:
+    initialize_database()
+    placeholder = _placeholder()
+    with connect() as connection:
+        connection.execute(
+            f"DELETE FROM supplier_catalog WHERE user_id = {placeholder}",
+            (user_id,),
+        )
+        connection.commit()
+
+
 def load_system_setting(key: str) -> dict[str, Any] | None:
     initialize_database()
     placeholder = _placeholder()
@@ -1154,6 +1214,7 @@ def database_status() -> dict[str, Any]:
             "competitors": "competitors",
             "pain_points": "pain_points",
             "suppliers": "supply_chain",
+            "supplier_catalog": "supplier_catalog",
             "users": "users",
             "agent_runs": "agent_runs",
         }.items():

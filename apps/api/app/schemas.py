@@ -106,6 +106,10 @@ class SearchRequest(BaseModel):
     language: str = "zh-CN"
 
 
+class SupplierCatalogImportRequest(BaseModel):
+    csv_text: str = Field(min_length=10, max_length=2_000_000)
+
+
 class SearchTask(BaseModel):
     id: str
     user_id: str

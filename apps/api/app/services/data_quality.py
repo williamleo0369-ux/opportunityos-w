@@ -37,7 +37,9 @@ def build_data_quality(
     derived_pain_clusters = sum(1 for item in pain_points if item.source not in {"amazon_product_page_reviews", "reddit_search_rss", "real_source_gap"})
     real_gap_clusters = sum(1 for item in pain_points if item.source == "real_source_gap")
     alibaba_count = _platform_count(supply_chain, "alibaba")
-    count_1688 = _platform_count(supply_chain, "1688")
+    supplier_catalog_count = sum(
+        1 for item in supply_chain if item.raw_data.get("source") == "supplier_catalog"
+    )
     ec21_count = _platform_count(supply_chain, "ec21")
 
     if isinstance(agent_result, dict):
@@ -128,12 +130,12 @@ def build_data_quality(
             "note": "B2B 供应商、MOQ 和报价信号",
         },
         {
-            "key": "1688",
-            "label": "1688",
+            "key": "supplier_catalog",
+            "label": "自有供应商库",
             "category": "供应链",
-            "status": _source_status(count_1688, guarded=True),
-            "count": count_1688,
-            "note": "账户授权采集的 1688 供应商、MOQ 和报价信号",
+            "status": _source_status(supplier_catalog_count),
+            "count": supplier_catalog_count,
+            "note": "账户导入并按关键词匹配的供应商、MOQ 与真实询价数据",
         },
         {
             "key": "ec21",
@@ -173,8 +175,6 @@ def build_data_quality(
         gaps.append("B2B 供应商本次未返回可靠行，供应链与利润测算为低置信。")
     if not amazon_review_clusters and not reddit_clusters:
         gaps.append("真实评论/社区痛点不足，痛点部分更多依赖 listing、专利和搜索词信号。")
-    if count_1688 == 0:
-        gaps.append("1688 暂未形成有效供应链证据；可在设置页连接账户会话后重新生成。")
     if real_gap_clusters:
         gaps.append("存在真实来源缺口提示，建议补采评论、竞品或供应商后再做高成本决策。")
     if not agent_available:

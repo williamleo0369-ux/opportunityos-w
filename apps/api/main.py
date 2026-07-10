@@ -34,6 +34,7 @@ from app.schemas import (
     SearchTask,
     SourceCredentialRequest,
     SourceHealthSchedulerRequest,
+    SupplierCatalogImportRequest,
     SupplyChainItem,
     TrendData,
     User,
@@ -46,9 +47,11 @@ from app.services.database_store import (
     append_api_log,
     create_user_payload,
     delete_saved_payload,
+    delete_supplier_catalog_payloads,
     load_agent_run_billing,
     load_api_logs,
     load_saved_payloads,
+    load_supplier_catalog_payloads,
     load_task_payload,
     load_task_payloads,
     load_user_payload,
@@ -56,6 +59,7 @@ from app.services.database_store import (
     load_user_payloads,
     persist_pipeline_result,
     replace_source_health_history,
+    replace_supplier_catalog_payloads,
     reserve_search_task,
     upsert_report_payload,
     upsert_saved_payload,
@@ -93,6 +97,7 @@ from app.services.source_credentials import (
     save_1688_cookie,
 )
 from app.services.source_health import get_source_health
+from app.services.supplier_catalog import parse_supplier_catalog_csv, supplier_catalog_template
 from app.services.system_settings import (
     clear_llm_settings,
     llm_settings_status,
@@ -409,7 +414,7 @@ def current_state_payload(user_id: str) -> dict[str, object]:
         }
         opportunity_ids = set(user_opportunities)
         user_reports = {key: value for key, value in reports.items() if value.user_id == user_id}
-        return build_state_payload(
+        payload = build_state_payload(
             tasks=user_tasks,
             opportunities=user_opportunities,
             trends={key: value for key, value in trends.items() if key in opportunity_ids},
@@ -425,6 +430,8 @@ def current_state_payload(user_id: str) -> dict[str, object]:
             },
             source_health_history=[],
         )
+        payload["supplier_catalog"] = load_supplier_catalog_payloads(user_id)
+        return payload
 
 
 def update_search_task(task_id: str, *, status: str, progress: int, current_step: str, error_message: str | None = None) -> None:
@@ -781,23 +788,18 @@ def source_health_for_user(
         **base,
         "sources": [dict(item) for item in base["sources"]],
     }
-    started_at = perf_counter()
-    status_1688, source = account_1688_status(user_id, refresh=refresh)
-    replacement = {
-        "key": "1688",
-        "label": "1688 Search HTML",
+    catalog_rows = load_supplier_catalog_payloads(user_id)
+    catalog_source = {
+        "key": "supplier_catalog",
+        "label": "Supplier Catalog",
         "category": "supply",
-        "status": status_1688.get("status", "missing_session"),
-        "available": bool(status_1688.get("available")),
-        "reason": status_1688.get("reason", ""),
-        "latency_ms": round((perf_counter() - started_at) * 1000),
+        "status": "ok" if catalog_rows else "empty",
+        "available": bool(catalog_rows),
+        "reason": f"{len(catalog_rows)} imported supplier rows" if catalog_rows else "可在设置页导入真实供应商 CSV",
+        "latency_ms": 0,
         "checked_at": utc_now().isoformat(),
-        "credential_source": source,
     }
-    health["sources"] = [
-        replacement if item.get("key") == "1688" else item
-        for item in health["sources"]
-    ]
+    health["sources"] = [*health["sources"], catalog_source]
     sources = health["sources"]
     health["summary"] = {
         "ok": sum(1 for item in sources if item["status"] in {"ok", "configured"}),
@@ -1074,7 +1076,7 @@ def system_status(user: User = Depends(current_user)) -> dict[str, object]:
     source_health = source_health_for_user(user.id, refresh=False)
     source_map = {item["key"]: item for item in source_health["sources"]}
     ai_status = source_map["llm_agent"]
-    status_1688 = source_map["1688"]
+    catalog_status = source_map["supplier_catalog"]
     enabled_sources = [
         "Google Suggest",
         "Amazon Suggest",
@@ -1100,23 +1102,10 @@ def system_status(user: User = Depends(current_user)) -> dict[str, object]:
                 "reason": ai_status.get("reason", "LLM provider is not configured."),
             }
         )
-    if status_1688.get("available"):
-        enabled_sources.append("1688 Search HTML")
+    if catalog_status.get("available"):
+        enabled_sources.append(f"Supplier Catalog ({catalog_status.get('reason')})")
     else:
-        credential_source = str(status_1688.get("credential_source", "none"))
-        guarded_sources.append(
-            {
-                "source": "1688 Search",
-                "status": status_1688.get("status", "guarded"),
-                "reason": status_1688.get("reason", "1688 is not available in the current runtime."),
-            }
-        )
-        pending_sources.insert(
-            0,
-            "1688 session/cookie integration"
-            if credential_source == "none"
-            else "1688 session validation or collector compatibility",
-        )
+        pending_sources.insert(0, "Supplier catalog CSV import")
     user_opportunity_ids = {
         item.id for item in opportunities.values() if item.user_id == user.id
     }
@@ -1145,13 +1134,7 @@ def system_status(user: User = Depends(current_user)) -> dict[str, object]:
         "account": AuthResponse(user=user, usage=usage_for_user(user)).model_dump(mode="json"),
         "export_formats": ["markdown", "pdf", "excel", "word"],
         "data_export_formats": ["json", "zip"],
-        "source_credentials": {
-            "1688": credential_1688_status(
-                user.id,
-                status_1688,
-                str(status_1688.get("credential_source", "none")),
-            ),
-        },
+        "source_credentials": {},
         "search_queue": search_queue_status(user.id),
         "pipeline": {
             "mode": mode,
@@ -1269,6 +1252,49 @@ def refresh_1688_credentials(user: User = Depends(current_user)) -> dict[str, ob
 def clear_1688_credentials(user: User = Depends(current_user)) -> dict[str, object]:
     clear_1688_cookie(user.id)
     return credential_1688_status(user.id)
+
+
+def supplier_catalog_response(user_id: str) -> dict[str, object]:
+    rows = load_supplier_catalog_payloads(user_id)
+    return {
+        "count": len(rows),
+        "updated_at": max((str(row.get("imported_at", "")) for row in rows), default=None),
+        "items": rows,
+    }
+
+
+@app.get("/api/supplier-catalog")
+def get_supplier_catalog(user: User = Depends(current_user)) -> dict[str, object]:
+    return supplier_catalog_response(user.id)
+
+
+@app.post("/api/supplier-catalog/import")
+def import_supplier_catalog(
+    request: SupplierCatalogImportRequest,
+    user: User = Depends(current_user),
+) -> dict[str, object]:
+    try:
+        rows = parse_supplier_catalog_csv(request.csv_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    replace_supplier_catalog_payloads(user.id, rows)
+    return supplier_catalog_response(user.id)
+
+
+@app.delete("/api/supplier-catalog")
+def clear_supplier_catalog(user: User = Depends(current_user)) -> dict[str, object]:
+    delete_supplier_catalog_payloads(user.id)
+    return supplier_catalog_response(user.id)
+
+
+@app.get("/api/supplier-catalog/template")
+def download_supplier_catalog_template(user: User = Depends(current_user)) -> Response:
+    del user
+    return Response(
+        content=supplier_catalog_template().encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="opportunity-os-supplier-template.csv"'},
+    )
 
 
 @app.post("/api/search", response_model=SearchResponse)

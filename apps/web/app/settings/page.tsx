@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, Database, FileArchive, Loader2, RefreshCw, Server, ShieldCheck, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, CheckCircle2, Database, Download, FileArchive, FileSpreadsheet, Loader2, RefreshCw, Server, ShieldCheck, Trash2, Upload, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { MetricCard, Section } from "@/components/ui";
-import { api, type ApiLog, type SearchQueueStatus, type SourceCredentialStatus, type SourceHealth, type SourceHealthHistory, type SourceHealthSchedulerStatus, type SystemStatus } from "@/lib/api";
+import { api, type ApiLog, type SearchQueueStatus, type SourceHealth, type SourceHealthHistory, type SourceHealthSchedulerStatus, type SupplierCatalog, type SystemStatus } from "@/lib/api";
 
 const formatBytes = (bytes: number) => {
   if (bytes <= 0) return "0 B";
@@ -21,21 +21,6 @@ const formatDateTime = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-
-const sourceCredentialLabel = (source?: SourceCredentialStatus | null) => {
-  if (!source?.configured) return "未连接";
-  if (source.available) return "可用";
-  if (source.status === "guarded") return "需重新登录";
-  if (source.status === "reachable_empty") return "已连接，待复核";
-  if (source.status === "missing_session" || source.status === "missing_credentials") return "未连接";
-  return "需检测";
-};
-
-const sourceCredentialTone = (source?: SourceCredentialStatus | null) => {
-  if (source?.available) return "bg-indigo/10 text-indigo";
-  if (source?.configured) return "bg-amber-50 text-amber-700";
-  return "bg-field text-muted";
-};
 
 const queueHealthLabel = (health?: string) => {
   if (health === "healthy") return "在线";
@@ -57,29 +42,32 @@ export default function SettingsPage() {
   const [sourceHealthHistory, setSourceHealthHistory] = useState<SourceHealthHistory>([]);
   const [sourceHealthScheduler, setSourceHealthScheduler] = useState<SourceHealthSchedulerStatus | null>(null);
   const [searchQueue, setSearchQueue] = useState<SearchQueueStatus | null>(null);
-  const [credential1688, setCredential1688] = useState<SourceCredentialStatus | null>(null);
+  const [supplierCatalog, setSupplierCatalog] = useState<SupplierCatalog | null>(null);
   const [apiLogs, setApiLogs] = useState<ApiLog[]>([]);
-  const [cookie1688, setCookie1688] = useState("");
+  const [supplierCsv, setSupplierCsv] = useState("");
+  const [supplierFileName, setSupplierFileName] = useState("");
+  const [confirmingCatalogClear, setConfirmingCatalogClear] = useState(false);
+  const supplierFileInput = useRef<HTMLInputElement>(null);
   const [schedulerInterval, setSchedulerInterval] = useState(3600);
   const [loading, setLoading] = useState(true);
   const [refreshingSources, setRefreshingSources] = useState(false);
   const [refreshingQueue, setRefreshingQueue] = useState(false);
   const [schedulerBusy, setSchedulerBusy] = useState(false);
-  const [credentialBusy, setCredentialBusy] = useState(false);
+  const [supplierBusy, setSupplierBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     setError("");
-    Promise.all([api.getSystemStatus(), api.getSourceHealthHistory(5), api.getSourceHealthScheduler(), api.getSearchQueueStatus(), api.listApiLogs(6)])
-      .then(([nextStatus, nextHistory, nextScheduler, nextQueue, nextLogs]) => {
+    Promise.all([api.getSystemStatus(), api.getSourceHealthHistory(5), api.getSourceHealthScheduler(), api.getSearchQueueStatus(), api.listApiLogs(6), api.getSupplierCatalog()])
+      .then(([nextStatus, nextHistory, nextScheduler, nextQueue, nextLogs, nextCatalog]) => {
         setStatus(nextStatus);
         setSourceHealth(nextStatus.pipeline?.source_health ?? null);
         setSourceHealthHistory(nextHistory);
         setSourceHealthScheduler(nextScheduler);
         setSearchQueue(nextQueue);
-        setCredential1688(nextStatus.source_credentials?.["1688"] ?? null);
+        setSupplierCatalog(nextCatalog);
         setApiLogs(nextLogs);
         if (nextScheduler.interval_seconds >= 60) {
           setSchedulerInterval(nextScheduler.interval_seconds);
@@ -144,55 +132,53 @@ export default function SettingsPage() {
     }
   };
 
-  const connect1688 = async () => {
-    const cookie = cookie1688.trim();
-    if (!cookie) return;
-    setCredentialBusy(true);
-    try {
-      const nextCredential = await api.set1688Credential(cookie);
-      setCredential1688(nextCredential);
-      setCookie1688("");
-      await refreshSourceHealth();
-      const nextStatus = await api.getSystemStatus();
-      setStatus(nextStatus);
-      setCredential1688(nextStatus.source_credentials?.["1688"] ?? nextCredential);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "1688 会话检测失败");
-    } finally {
-      setCredentialBusy(false);
+  const selectSupplierCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      setError("供应商 CSV 不能超过 2 MB");
+      event.target.value = "";
+      return;
     }
+    setError("");
+    setSupplierFileName(file.name);
+    setSupplierCsv(await file.text());
+    event.target.value = "";
   };
 
-  const refresh1688 = async () => {
-    setCredentialBusy(true);
+  const importSupplierCatalog = async () => {
+    if (!supplierCsv.trim()) return;
+    setSupplierBusy(true);
     setError("");
     try {
-      const nextCredential = await api.refresh1688Credential();
-      setCredential1688(nextCredential);
+      const nextCatalog = await api.importSupplierCatalog(supplierCsv);
+      setSupplierCatalog(nextCatalog);
+      setSupplierCsv("");
+      setSupplierFileName("");
+      setConfirmingCatalogClear(false);
       await refreshSourceHealth();
       const nextStatus = await api.getSystemStatus();
       setStatus(nextStatus);
-      setCredential1688(nextStatus.source_credentials?.["1688"] ?? nextCredential);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "1688 会话刷新失败");
+      setError(err instanceof Error ? err.message : "供应商资料导入失败");
     } finally {
-      setCredentialBusy(false);
+      setSupplierBusy(false);
     }
   };
 
-  const clear1688 = async () => {
-    setCredentialBusy(true);
+  const clearSupplierCatalog = async () => {
+    setSupplierBusy(true);
+    setError("");
     try {
-      const nextCredential = await api.clear1688Credential();
-      setCredential1688(nextCredential);
+      setSupplierCatalog(await api.clearSupplierCatalog());
+      setConfirmingCatalogClear(false);
       await refreshSourceHealth();
       const nextStatus = await api.getSystemStatus();
       setStatus(nextStatus);
-      setCredential1688(nextStatus.source_credentials?.["1688"] ?? nextCredential);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "1688 会话清除失败");
+      setError(err instanceof Error ? err.message : "供应商资料清空失败");
     } finally {
-      setCredentialBusy(false);
+      setSupplierBusy(false);
     }
   };
 
@@ -326,62 +312,95 @@ export default function SettingsPage() {
             <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-4">
                 <div>
-                  <p className="font-medium text-ink">1688 真实供应链采集</p>
-                  <p className="mt-1 text-sm text-muted">加密保存当前账户的 1688 会话，用于下一次机会分析中的真实供应商采集。</p>
+                  <p className="font-medium text-ink">供应商资料库</p>
+                  <p className="mt-1 text-sm leading-6 text-muted">导入真实询价或供应商名录，与 Alibaba.com、EC21 公开数据共同参与供应链分析。</p>
                 </div>
-                <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${sourceCredentialTone(credential1688)}`}>
-                  {sourceCredentialLabel(credential1688)}
+                <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${supplierCatalog?.count ? "bg-indigo/10 text-indigo" : "bg-field text-muted"}`}>
+                  {supplierCatalog?.count ? `${supplierCatalog.count} 条` : "未导入"}
                 </span>
               </div>
-              <div className="mb-3 rounded-lg border border-line bg-field/70 px-3 py-2 text-xs leading-5 text-muted">
-                <p className="font-semibold text-ink">如何获取 Cookie</p>
-                <p>1. 在浏览器登录 1688，搜索任意商品。</p>
-                <p>2. 打开开发者工具 Network，点击搜索请求。</p>
-                <p>3. 复制 Request Headers 里的 Cookie 整行，粘贴到下方保存并检测。</p>
+              <div className="mb-3 flex flex-col gap-3 rounded-lg border border-line bg-field/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-indigo" />
+                  <div>
+                    <p className="text-sm font-semibold text-ink">CSV 模板包含关键词、价格、MOQ、地区与链接</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">每次导入会替换当前账户资料库；最多 500 条、2 MB。</p>
+                  </div>
+                </div>
+                <a
+                  href={api.supplierCatalogTemplateUrl()}
+                  className="focus-ring inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink"
+                >
+                  <Download size={14} />
+                  下载模板
+                </a>
               </div>
-              <textarea
-                value={cookie1688}
-                onChange={(event) => setCookie1688(event.target.value)}
-                placeholder="粘贴 1688 Cookie，或粘贴包含 Cookie: 的完整请求头"
-                spellCheck={false}
-                className="focus-ring min-h-24 w-full resize-y rounded-lg border border-line bg-field px-3 py-2 font-mono text-xs text-ink placeholder:text-muted/70"
-              />
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={connect1688}
-                  disabled={credentialBusy || cookie1688.trim().length < 8}
-                  className="focus-ring rounded-lg bg-indigo px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo/20 transition hover:opacity-90 disabled:opacity-60"
+                  onClick={() => supplierFileInput.current?.click()}
+                  className="focus-ring inline-flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-indigo/40"
                 >
-                  保存并检测
+                  <Upload size={15} className="text-indigo" />
+                  选择 CSV
                 </button>
+                <input ref={supplierFileInput} type="file" accept=".csv,text/csv" onChange={selectSupplierCsv} className="sr-only" />
                 <button
                   type="button"
-                  onClick={refresh1688}
-                  disabled={credentialBusy || !credential1688?.configured}
-                  className="focus-ring rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-indigo/40 disabled:opacity-60"
+                  onClick={importSupplierCatalog}
+                  disabled={supplierBusy || !supplierCsv.trim()}
+                  className="focus-ring inline-flex items-center gap-2 rounded-lg bg-indigo px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo/20 transition hover:opacity-90 disabled:opacity-60"
                 >
-                  重新检测
+                  {supplierBusy ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                  导入并启用
                 </button>
-                <button
-                  type="button"
-                  onClick={clear1688}
-                  disabled={credentialBusy || !credential1688?.configured}
-                  className="focus-ring rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-clay/40 disabled:opacity-60"
-                >
-                  清除会话
-                </button>
+                {confirmingCatalogClear ? (
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-clay/20 bg-clay/5 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingCatalogClear(false)}
+                      disabled={supplierBusy}
+                      className="focus-ring rounded-md px-3 py-1.5 text-xs font-semibold text-muted disabled:opacity-60"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearSupplierCatalog}
+                      disabled={supplierBusy}
+                      className="focus-ring inline-flex items-center gap-1.5 rounded-md bg-clay px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      <Trash2 size={13} />
+                      确认清空
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingCatalogClear(true)}
+                    disabled={supplierBusy || !supplierCatalog?.count}
+                    className="focus-ring inline-flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-clay/40 disabled:opacity-60"
+                  >
+                    <Trash2 size={15} />
+                    清空资料库
+                  </button>
+                )}
+                {supplierFileName ? <span className="truncate text-xs font-medium text-muted">已选择：{supplierFileName}</span> : null}
               </div>
-              {credential1688 ? (
-                <div className="mt-3 rounded-lg bg-field/70 px-3 py-2 text-xs leading-5 text-muted">
-                  <p>
-                    凭据来源：<span className="font-semibold text-ink">{credential1688.source === "account" ? "当前账户" : credential1688.source === "environment" ? "环境变量" : "未配置"}</span>
-                    {credential1688.checked_at ? ` · 检测于 ${formatDateTime(credential1688.checked_at)}` : ""}
-                  </p>
-                  <p className="mt-1">
-                    检测结果：<span className="font-semibold text-ink">{sourceCredentialLabel(credential1688)}</span>
-                    {credential1688.reason ? ` · ${credential1688.reason}` : ""}
-                  </p>
+              {supplierCatalog?.count ? (
+                <div className="mt-4 rounded-lg bg-field/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                    <span>当前资料库：<strong className="text-ink">{supplierCatalog.count} 条供应商</strong></span>
+                    {supplierCatalog.updated_at ? <span>更新于 {formatDateTime(supplierCatalog.updated_at)}</span> : null}
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {supplierCatalog.items.slice(0, 4).map((item) => (
+                      <div key={item.id} className="rounded-lg border border-line bg-white px-3 py-2 text-xs">
+                        <p className="truncate font-semibold text-ink">{item.supplier_name}</p>
+                        <p className="mt-1 truncate text-muted">{item.keyword || "未指定关键词"} · MOQ {item.moq || "待询"}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>

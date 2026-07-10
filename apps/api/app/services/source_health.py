@@ -8,7 +8,6 @@ from typing import Any, Callable
 from app.services.ai_agent import llm_status
 from app.services.real_sources import (
     amazon_suggest,
-    collect_1688_supply_chain,
     collect_alibaba_supply_chain,
     collect_amazon_competitors,
     collect_amazon_product_reviews,
@@ -16,7 +15,6 @@ from app.services.real_sources import (
     collect_google_patents,
     collect_reddit_pain_posts,
     google_suggest,
-    probe_1688_supply_status,
     wikipedia_signal,
 )
 
@@ -45,7 +43,6 @@ def get_source_health(refresh: bool = False) -> dict[str, Any]:
         ("amazon_reviews", "Amazon Product Page Reviews", "review", _check_amazon_reviews),
         ("reddit_rss", "Reddit Search RSS", "review", _check_reddit),
         ("alibaba", "Alibaba.com Search HTML", "supply", _check_alibaba),
-        ("1688", "1688 Search HTML", "supply", _check_1688),
         ("ec21", "EC21 B2B Market", "supply", _check_ec21),
         ("llm_agent", "LLM Agent", "agent", _check_llm),
     ]
@@ -76,7 +73,6 @@ def health_by_key(refresh: bool = False) -> dict[str, dict[str, Any]]:
 
 
 def _shallow_health() -> dict[str, Any]:
-    status_1688 = probe_1688_supply_status(PROBE_KEYWORD)
     ai = llm_status()
     sources = [
         _source("google_suggest", "Google Suggest", "trend", "not_checked", False, "Use refresh=true to probe this source."),
@@ -87,7 +83,6 @@ def _shallow_health() -> dict[str, Any]:
         _source("amazon_reviews", "Amazon Product Page Reviews", "review", "not_checked", False, "Use refresh=true to probe this source."),
         _source("reddit_rss", "Reddit Search RSS", "review", "not_checked", False, "Use refresh=true to probe this source."),
         _source("alibaba", "Alibaba.com Search HTML", "supply", "not_checked", False, "Use refresh=true to probe this source."),
-        _source("1688", "1688 Search HTML", "supply", str(status_1688["status"]), bool(status_1688["available"]), str(status_1688["reason"])),
         _source("ec21", "EC21 B2B Market", "supply", "not_checked", False, "Use refresh=true to probe this source."),
         _source("llm_agent", "LLM Agent", "agent", str(ai["status"]), bool(ai["available"]), str(ai["reason"]), provider=ai.get("provider"), model=ai.get("model")),
     ]
@@ -188,14 +183,6 @@ def _check_reddit() -> dict[str, Any]:
 def _check_alibaba() -> dict[str, Any]:
     rows = collect_alibaba_supply_chain(PROBE_KEYWORD, limit=1)
     return {"available": bool(rows), "status": "ok" if rows else "guarded", "reason": f"{len(rows)} supplier rows", "rows": len(rows)}
-
-
-def _check_1688() -> dict[str, Any]:
-    status = probe_1688_supply_status(PROBE_KEYWORD)
-    if status.get("available"):
-        rows = collect_1688_supply_chain(PROBE_KEYWORD, limit=1)
-        return {"available": bool(rows), "status": "ok" if rows else "reachable_empty", "reason": f"{len(rows)} supplier rows", "rows": len(rows)}
-    return {"available": False, "status": str(status["status"]), "reason": str(status["reason"]), "rows": 0}
 
 
 def _check_ec21() -> dict[str, Any]:

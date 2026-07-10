@@ -140,13 +140,13 @@ export default function ReportDetailPage() {
   const sourceCoverage = dataQuality?.sources ?? [];
   const actionableSources = sourceCoverage.filter((source) => source.status !== "ok" && source.status !== "configured");
   const remediationActions = actionableSources.slice(0, 4).map((source) => {
-    if (source.key === "1688") {
+    if (source.key === "1688" || source.key === "supplier_catalog") {
       return {
         key: source.key,
-        title: "连接 1688 会话",
-        description: "补齐国内供应商、MOQ 与报价证据；连接后建议重新分析同一关键词。",
+        title: "导入供应商资料",
+        description: "补齐真实供应商、MOQ 与询价证据；导入后建议重新分析同一关键词。",
         href: "/settings",
-        label: "去设置",
+        label: "导入 CSV",
         icon: Settings,
       };
     }
